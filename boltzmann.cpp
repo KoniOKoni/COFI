@@ -10,11 +10,13 @@
 using namespace std;
 
 /*Matter = decaying dark matter + baryon (No separated CDM components as assumed in the note)*/
-double OmegaDDM
 
 int main()
 {
-
+  for (int i = 0; i < 10; i++){
+    cout << "This is " << i+1 << "-th line : " << "Hello World!" << endl;
+  }
+  return 0;
 }
 
 
