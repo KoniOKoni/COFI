@@ -23,43 +23,46 @@
 #define Omega_photon 8e-5
 #define Omega_neutrino 1e-5
 
-#define H0 2.2494e-4 /*Mpc^-1*/
+#define H0 1.44e-33 /*eV^-1*/
 #define RHOC 3.67e-11 /*eV^4*/
 #define G 6.70746e-57 /*eV^-2*/
 
 
-/*Conformal Hubble constant in Mpc^-1*/
+/*Conformal Hubble constant in eV^-1*/
 double H(double x, double rho_ddm, double rho_CFT)
 {
     double rhotot;
     rhotot = rho_CFT + rho_ddm + RHOC*((Omega_b + Omega_cdm)*exp(-3*x) + (Omega_photon + Omega_neutrino)*exp(-4*x) + Omega_Lambda);
-    if (rhotot < 0){
+    if (rhotot <= 0){
         printf("Negative energy at a = %e!\n", exp(x));
         exit(1);
     }
-    return 1e-9*GeV_to_Mpc*sqrt((8*PI*G/3)*exp(2*x)*rhotot);
+    double log_H2 = 2*x + log(rhotot) + log(8*PI*G/3.0);
+    return exp(0.5*log_H2);
 }
 
+/*Evolution equation of log(rho)*/
 double DDMEQ(double x, double rho_ddm, double rho_CFT, double Gamma0)
 {
-    return -3*rho_ddm - Gamma0/H(x, rho_ddm, rho_CFT) * exp((Gammad + 1)*x)*rho_ddm;
+    return -3.0 - (Gamma0/H(x, exp(rho_ddm), exp(rho_CFT))) * exp((Gammad + 1)*x);
 }
 
 double CFTEQ(double x, double rho_ddm, double rho_CFT, double Gamma0)
 {
-    return -4*rho_CFT + Gamma0/H(x, rho_ddm, rho_CFT) * exp((Gammad + 1)*x)*rho_ddm;
+    return -4.0 + (Gamma0/H(x, exp(rho_ddm), exp(rho_CFT)) * exp((Gammad + 1)*x))*exp(rho_ddm - rho_CFT);
 }
+/************************************************************************************* */
 
 void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double Gamma0)
 {
     FILE *output;
     output = fopen("output.dat", "w");
     double x = x0;
-    double rho_ddm = ddm0;
-    double rho_CFT = CFT0;
+    double rho_ddm = log(ddm0);
+    double rho_CFT = log(CFT0);
 
-    fprintf(output, "# x\t\trho_ddm\t\trho_CFT\n");
-    fprintf(output, "%e\t%e\t%e\n", x, (8*PI*G/3)*rho_ddm*1e-36, (8*PI*G/3)*rho_CFT*1e-36);
+    fprintf(output, "# x\t\tlog(rho_ddm)\t\tlog(rho_CFT)\n");
+    fprintf(output, "%e\t%e\t%e\n", x, rho_ddm, rho_CFT);
 
     for (int i = 0; i < step; i++){
         double k1_1 = DDMEQ(x, rho_ddm, rho_CFT, Gamma0);
@@ -78,7 +81,7 @@ void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double G
         rho_CFT += h*(k1_2 + 2*k2_2 + 2*k3_2 + k4_2)/6.0;
         x += h;
 
-        fprintf(output, "%e\t%e\t%e\n", x, (8*PI*G/3)*rho_ddm*1e-36, (8*PI*G/3)*rho_CFT*1e-36);
+        fprintf(output, "%e\t%e\t%e\n", x, rho_ddm, rho_CFT);
     }
     fclose(output);
     printf("Result is saved in output.dat.\n");
@@ -87,17 +90,18 @@ void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double G
 int main()
 {
     /*General parameters*/
-    double h = -1e-6;
-    double ainit = 1e-10;
+    double h = -1e-4;
+    double ainit = 1e-7;
     double atr = 1.58e-5; /*Scale factor at which decay rate is turned off*/
-    double Gamma0 = 1e-6; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
+    double Gamma0 = 10; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
     int N = (int)((log(atr) - log(ainit))/fabs(h)); /*The number of steps*/
 
     /*Convert to Mpc-eV units*/
-    Gamma0 *= pow(Gyr_to_Mpc, -1); /*Mpc^-1*/
+    Gamma0 *= 2.085e-50; /*eV^-1*/
 
-    double rho_CFT_atr = RHOC*Omega_photon*pow(atr, -4)*(7/8)*pow(4/11, 4/3)*DNeff;
-    double rho_ddm_atr = RHOC*Omega_ddm*pow(atr, -3);
+    double rho_CFT_atr = RHOC*Omega_photon*pow(atr, -4.0)*(7.0/8.0)*pow(4.0/11.0, 4.0/3.0)*DNeff;
+    double rho_ddm_atr = RHOC*Omega_ddm*pow(atr, -3.0);
+    printf("%e\n", H(log(atr), rho_ddm_atr, rho_CFT_atr));
 
     Boltzmann(log(atr), rho_ddm_atr, rho_CFT_atr, h, N, Gamma0);
 
