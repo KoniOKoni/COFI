@@ -9,10 +9,10 @@
 
 #define AEQ 2.93e-4 /*Scale factor at matter-radiation equality*/
 #define PI 3.141592
-#define Gammad 1
-#define DNeff 0.5 /*Delta N_eff at a_tr*/
-#define ainit 1e-7
-#define atr 1.58e-5
+#define Gammad -3
+#define DNeff 0.6384 /*Delta N_eff at a_tr*/
+#define ainit 1e-10
+#define atr 5.10479e-5
 
 /*Conversion factors*/
 #define KG_to_GeV 5.62e26
@@ -23,12 +23,12 @@
 #define C 299792458
 #define GeV_to_Mpc 1.563e28
 
-#define Omega_ddm 0.003
-#define Omega_b 0.049389
-#define Omega_cdm 0.3
+#define Omega_ddm 2.78e-6
+#define Omega_b 0.0443678
+#define Omega_cdm 0.2523
 #define Omega_Lambda 0.679
 #define Omega_photon 5.4e-5
-#define Omega_neutrino 1e-5
+#define Omega_neutrino 1e-6
 
 #define H0 1.44e-33 /*eV^-1*/
 #define RHOC 3.67e-11 /*eV^4*/
@@ -117,7 +117,7 @@ int main()
 {
     /*General parameters*/
     double h = -1e-4;
-    double Gamma0 = 1e6; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
+    double Gamma0 = 1e3; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
     int N = (int)((log(atr) - log(ainit))/fabs(h)); /*The number of steps*/
 
     /*Convert to eV units*/
