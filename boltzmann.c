@@ -2,10 +2,17 @@
 #include <stdlib.h>
 #include <math.h>
 
+/************************/
+/*Raw output is loged quantity.*/
+/*Exponentiating must be done to be used outside this code*/
+/************************/
+
 #define AEQ 2.93e-4 /*Scale factor at matter-radiation equality*/
 #define PI 3.141592
-#define Gammad -2.0
+#define Gammad 1
 #define DNeff 0.5 /*Delta N_eff at a_tr*/
+#define ainit 1e-7
+#define atr 1.58e-5
 
 /*Conversion factors*/
 #define KG_to_GeV 5.62e26
@@ -16,11 +23,11 @@
 #define C 299792458
 #define GeV_to_Mpc 1.563e28
 
-#define Omega_ddm 0.3
+#define Omega_ddm 0.003
 #define Omega_b 0.049389
-#define Omega_cdm 0
+#define Omega_cdm 0.3
 #define Omega_Lambda 0.679
-#define Omega_photon 8e-5
+#define Omega_photon 5.4e-5
 #define Omega_neutrino 1e-5
 
 #define H0 1.44e-33 /*eV^-1*/
@@ -32,7 +39,7 @@
 double H(double x, double rho_ddm, double rho_CFT)
 {
     double rhotot;
-    rhotot = rho_CFT + rho_ddm + RHOC*((Omega_b + Omega_cdm)*exp(-3*x) + (Omega_photon + Omega_neutrino)*exp(-4*x) + Omega_Lambda);
+    rhotot = rho_CFT + rho_ddm + RHOC*((Omega_b + Omega_cdm)*exp(-3*x) + (Omega_photon + Omega_neutrino)*exp(-4*x) + Omega_Lambda*exp(0.039*x));
     if (rhotot <= 0){
         printf("Negative energy at a = %e!\n", exp(x));
         exit(1);
@@ -53,13 +60,16 @@ double CFTEQ(double x, double rho_ddm, double rho_CFT, double Gamma0)
 }
 /************************************************************************************* */
 
-void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double Gamma0)
+void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double Gamma0, double *DDM, double *CFT)
 {
     FILE *output;
     output = fopen("output.dat", "w");
     double x = x0;
     double rho_ddm = log(ddm0);
     double rho_CFT = log(CFT0);
+
+    DDM[0] = exp(rho_ddm);
+    CFT[0] = exp(rho_CFT);
 
     fprintf(output, "# x\t\tlog(rho_ddm)\t\tlog(rho_CFT)\n");
     fprintf(output, "%e\t%e\t%e\n", x, rho_ddm, rho_CFT);
@@ -81,29 +91,54 @@ void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double G
         rho_CFT += h*(k1_2 + 2*k2_2 + 2*k3_2 + k4_2)/6.0;
         x += h;
 
+        DDM[i+1] = exp(rho_ddm);
+        CFT[i+1] = exp(rho_CFT);
+
         fprintf(output, "%e\t%e\t%e\n", x, rho_ddm, rho_CFT);
     }
     fclose(output);
     printf("Result is saved in output.dat.\n");
 }
 
+/*Interpolation after atr*/
+/*rho(a) = rho(atr)*a^-3 (a > atr)*/
+double interpolation(double *rho, double a)
+{
+    if (a >= atr){
+        return rho[0]*pow(atr/a, 3);
+    }
+    else{
+        printf("Target a must be larger than atr/\n");
+        exit(1);
+    }
+}
+
 int main()
 {
     /*General parameters*/
     double h = -1e-4;
-    double ainit = 1e-7;
-    double atr = 1.58e-5; /*Scale factor at which decay rate is turned off*/
-    double Gamma0 = 10; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
+    double Gamma0 = 1e6; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
     int N = (int)((log(atr) - log(ainit))/fabs(h)); /*The number of steps*/
 
-    /*Convert to Mpc-eV units*/
+    /*Convert to eV units*/
     Gamma0 *= 2.085e-50; /*eV^-1*/
 
     double rho_CFT_atr = RHOC*Omega_photon*pow(atr, -4.0)*(7.0/8.0)*pow(4.0/11.0, 4.0/3.0)*DNeff;
     double rho_ddm_atr = RHOC*Omega_ddm*pow(atr, -3.0);
-    printf("%e\n", H(log(atr), rho_ddm_atr, rho_CFT_atr));
+    
+    /*Original data (not log)*/
+    double *DDM = (double *)malloc(sizeof(double)*(N+1));
+    double *CFT = (double *)malloc(sizeof(double)*(N+1));
+    double *a = (double *)malloc(sizeof(double)*(N+1));
 
-    Boltzmann(log(atr), rho_ddm_atr, rho_CFT_atr, h, N, Gamma0);
+    for (int i = 0; i < N; i++){
+        a[i] = log(atr) + i*h;
+        a[i] = exp(a[i]);
+    }
+
+    Boltzmann(log(atr), rho_ddm_atr, rho_CFT_atr, h, N, Gamma0, DDM, CFT);
+
+    free(DDM); free(CFT); free(a);
 
     return 0;
 }
