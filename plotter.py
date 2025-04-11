@@ -55,7 +55,7 @@ axes[0].set_xscale('log')
 axes[0].set_yscale('log')
 axes[1].set_xscale('log')
 axes[1].set_yscale('log')
-axes[0].set_title(r"$\Gamma_d = {}, forward$".format(params["Gammad"]))
+axes[0].set_title(r"$\Gamma_d = {}$".format(params["Gammad"]))
 axes[1].set_title(r"$\Gamma/H$")
 axes[0].legend(loc=0)
 axes[0].set_xlabel(r"$a$")
@@ -69,6 +69,6 @@ for i in range(2):
     axes[i].set_xlim([params["ainit"], params["atr"]])
 
 
-plt.savefig("Forward_d={}.png".format(params["Gammad"]))
+#plt.savefig("d={}.png".format(params["Gammad"]))
 plt.show()
 dat.close()
