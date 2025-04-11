@@ -9,7 +9,7 @@
 
 #define AEQ 2.93e-4 /*Scale factor at matter-radiation equality*/
 #define PI 3.141592
-#define Gammad -3
+#define Gammad -3.5
 #define DNeff 0.6384 /*Delta N_eff at a_tr*/
 #define ainit 1e-10
 #define atr 5.10479e-5
@@ -23,9 +23,9 @@
 #define C 299792458
 #define GeV_to_Mpc 1.563e28
 
-#define Omega_ddm 2.78e-6
+#define Omega_ddm 0.2523
 #define Omega_b 0.0443678
-#define Omega_cdm 0.2523
+#define Omega_cdm 0
 #define Omega_Lambda 0.679
 #define Omega_photon 5.4e-5
 #define Omega_neutrino 1e-6
@@ -60,10 +60,10 @@ double CFTEQ(double x, double rho_ddm, double rho_CFT, double Gamma0)
 }
 /************************************************************************************* */
 
-void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double Gamma0, double *DDM, double *CFT)
+void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double Gamma0, double *DDM, double *CFT, char *s)
 {
     FILE *output;
-    output = fopen("output.dat", "w");
+    output = fopen(s, "w");
     double x = x0;
     double rho_ddm = log(ddm0);
     double rho_CFT = log(CFT0);
@@ -72,7 +72,7 @@ void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double G
     CFT[0] = exp(rho_CFT);
 
     fprintf(output, "# x\t\tlog(rho_ddm)\t\tlog(rho_CFT)\n");
-    fprintf(output, "%e\t%e\t%e\n", x, rho_ddm, rho_CFT);
+    fprintf(output, "%e\t%e\t%e\t%e\t%e\n", x, rho_ddm, rho_CFT, H(x, exp(rho_ddm), exp(rho_CFT)), Gamma0*exp(Gammad*x));
 
     for (int i = 0; i < step; i++){
         double k1_1 = DDMEQ(x, rho_ddm, rho_CFT, Gamma0);
@@ -94,10 +94,10 @@ void Boltzmann(double x0, double ddm0, double CFT0, double h, int step, double G
         DDM[i+1] = exp(rho_ddm);
         CFT[i+1] = exp(rho_CFT);
 
-        fprintf(output, "%e\t%e\t%e\n", x, rho_ddm, rho_CFT);
+        fprintf(output, "%e\t%e\t%e\t%e\t%e\n", x, rho_ddm, rho_CFT, H(x, exp(rho_ddm), exp(rho_CFT)), Gamma0*exp(Gammad*x));
     }
     fclose(output);
-    printf("Result is saved in output.dat.\n");
+    printf("Result is saved in %s.\n", s);
 }
 
 /*Interpolation after atr*/
@@ -116,7 +116,7 @@ double interpolation(double *rho, double a)
 int main()
 {
     /*General parameters*/
-    double h = -1e-4;
+    double h = -1e-5;
     double Gamma0 = 1e3; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
     int N = (int)((log(atr) - log(ainit))/fabs(h)); /*The number of steps*/
 
@@ -136,7 +136,16 @@ int main()
         a[i] = exp(a[i]);
     }
 
-    Boltzmann(log(atr), rho_ddm_atr, rho_CFT_atr, h, N, Gamma0, DDM, CFT);
+    Boltzmann(log(atr), rho_ddm_atr, rho_CFT_atr, h, N, Gamma0, DDM, CFT, "output_backward.dat");
+    Boltzmann(log(ainit), DDM[N], 1e-30, -1*h, N, Gamma0, DDM, CFT, "output_forward.dat");
+    FILE *params;
+    params = fopen("params.dat", "w");
+    fprintf(params, "%s\t%e\n", "aeq", AEQ);
+    fprintf(params, "%s\t%e\n", "Gammad", Gammad);
+    fprintf(params, "%s\t%e\n", "Gamma0", Gamma0);
+    fprintf(params, "%s\t%e\n", "DNeff", DNeff);
+    fprintf(params, "%s\t%e\n", "atr", atr);
+    fclose(params);
 
     free(DDM); free(CFT); free(a);
 

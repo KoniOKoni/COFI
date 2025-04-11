@@ -33,7 +33,7 @@ Gamma0 = Gamma0*Gyr_over_Mpc #Mpc^-1
 G = 2.75e-115 #Mpc^2
 rhocrit = 2.19e106 #Mpc^-4
 
-rho_CFT_atr = rhocrit * Omega_photon * pow(atr, -4) * (7/8) * pow(4/11, 4/3) * DNeff
+rho_CFT_atr = rhocrit * Omega_photon * pow(atr, -4) * (7.0/8.0) * pow(4.0/11.0, 4.0/3.0) * DNeff
 rho_ddm_atr = rhocrit * Omega_ddm * pow(atr, -3)
 
 
