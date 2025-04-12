@@ -277,7 +277,7 @@ int main()
     fprintf(params, "%s\t%e\n", "ainit", ainit);
     fclose(params); fclose(output);
 
-    FILE *test;
+    /*FILE *test;
     test = fopen("test.dat", "w");
     double randa, interpDDM, interpCFT;
     for (int i = 0; i < 10000; i++){
@@ -287,7 +287,7 @@ int main()
         if (interpDDM > 1e70 || interpCFT > 1e70) continue;
         else fprintf(test, "%e\t%e\t%e\n", log(randa), interpDDM, interpCFT);
     }
-    fclose(test);
+    fclose(test);*/
     free(loga); free(DDM); free(CFT);
 
     return 0;
