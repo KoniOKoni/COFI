@@ -25,13 +25,12 @@ while True:
     l = dat.readline()
     if not l:
         break
-    loga, logrho_ddm, logrho_CFT, H, Gamma, rhotot = list(map(float, l.strip().split()))
+    loga, logrho_ddm, logrho_CFT, H, Gamma = list(map(float, l.strip().split()))
     a.append(loga)
     rhoddm.append(logrho_ddm)
     rhoCFT.append(logrho_CFT)
     Hs.append(H)
     Gammas.append(Gamma)
-    rhot.append(rhotot)
 
 while True:
     l = paramdat.readline()
@@ -53,7 +52,7 @@ print("rhoddm = {}, rhoCFT = {}".format(rhoddm[-1], rhoCFT[-1]))
 fig, axes = plt.subplots(2,1, figsize = (16,8), constrained_layout = True)
 axes[0].plot(a, rhoddm, 'r-', label = r"$\rho_{\mathrm{ddm}}$")
 axes[0].plot(a, rhoCFT, 'b-', label = r"$\rho_{\mathrm{CFT}}$")
-axes[0].plot(a, rhot, 'g-', label = r"$\rho_{\mathrm{tot}}$")
+#axes[0].plot(a, rhot, 'g-', label = r"$\rho_{\mathrm{tot}}$")
 axes[1].plot(a, Gammas/Hs, 'k-', label=r"$\Gamma(a)/H(a)$")
 axes[0].set_xscale('log')
 axes[0].set_yscale('log')
