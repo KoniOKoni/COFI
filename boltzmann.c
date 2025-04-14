@@ -3,32 +3,56 @@
 #include <math.h>
 #include <string.h>
 
+#define _SUCCESS_ 0
+#define class_alloc(pointer, size, error_message)                    \
+  if (((pointer) = malloc(size)) == NULL) {                          \
+    sprintf(error_message, "Could not allocate memory");             \
+    return 1;                                                        \
+  }
+
 /************************/
 /*Raw output is loged quantity.*/
 /*Exponentiating must be done to be used outside this code*/
 /************************/
 
-#define AEQ 2.93e-4 /*Scale factor at matter-radiation equality*/
-#define PI 3.141592
-#define Gammad -3.5
-#define DNeff 0.6384 /*Delta N_eff at a_tr*/
-#define ainit 1e-10
-#define atr 1e-3
+#define _Mpc_over_m_ 3.085677581282e22  /**< conversion factor from meters to megaparsecs */
+#define _Gyr_over_Mpc_ 3.06601394e2 /**< conversion factor from megaparsecs to gigayears
+                                       (c=1 units, Julian years of 365.25 days) */
+#define _c_ 2.99792458e8            /**< c in m/s */
+#define _G_ 6.67428e-11             /**< Newton constant in m^3/Kg/s^2 */
+#define _eV_ 1.602176487e-19        /**< 1 eV expressed in J */
 
-#define Omega_ddm 0.2523
-#define Omega_b 0.0443678
-#define Omega_cdm 0
-#define Omega_Lambda 0.679
-#define Omega_photon 5.4e-5
-#define Omega_neutrino 1e-6
+#define _AEQ_ 2.93e-4 /*Scale factor at matter-radiation equality*/
+#define _PI_ 3.141592
+#define _AINIT_ 1e-10
 
-#define H0 1.44e-33 /*eV^-1*/
-#define RHOC 3.67e-11 /*eV^4*/
-#define G 6.70746e-57 /*eV^-2*/
-
-#define TOL 1e-10
+#define TOL 1e-20
 #define MAX_ITER 100
-#define hstep 1e-5
+#define _H_STEP_ 0.1
+struct background {
+    double *a_table;
+    double *rho_chi_table;
+    double *rho_cft_table;
+    double *Gamma_table;
+    double *H_table;
+    double jac[2][2];
+    int a_size;
+    char error_message[1024];
+
+    /*Today's value*/
+    double H0; /**< \f$ H_0 \f$: Hubble parameter (in fact, [\f$H_0/c\f$]) in \f$ Mpc^{-1} \f$ */
+    double Omega0_g; /**< \f$ \Omega_{0 \gamma} \f$: photons */
+    double Omega0_b; /**< \f$ \Omega_{0 b} \f$: baryons */
+    double Omega0_ur; /**< \f$ \Omega_{0 \nu r} \f$: ultra-relativistic neutrinos */
+    double Omega0_cdm;      /**< \f$ \Omega_{0 cdm} \f$: cold dark matter */
+    double Omega0_chi;   /**< decaying darkmatter */
+    double Omega0_lambda;    /**< \f$ \Omega_{0_\Lambda} \f$: cosmological constant */
+    /************************************/
+    double Gamma0;      /* Gamma_0 for decaying dark matter in Mpc^{-1}*/
+    double Gammad; /*Power index*/
+    double DNeff; /*Delta N_eff at a= a_tr. Assumed to be constant(?)*/
+    double atr;
+};
 
 double coeff[3] = {3.0/2.0, -2.0, 1.0/2.0};
 
@@ -53,14 +77,12 @@ void jacobian(double x, double *rho, double Gamma0 ,double jac[][2], double a, d
             jac[i][j] = 0;
         }
     }
-    double Gamma = Gamma0*exp((Gammad + 1)*x);
     double Hub = H(x, exp(rho[0]), exp(rho[1]));
-    double k = Gamma/Hub;
 
-    jac[0][0] = (a - exp(rho[1] - rho[0])*h*k)/(pow(a,2) - a*exp(rho[1]-rho[0])*h*k);
+    jac[0][0] = h/a;
     jac[0][1] = 0.0;
-    jac[1][0] = -1*exp(rho[1]-rho[0])*h*k/(pow(a,2) - a*exp(rho[1]-rho[0])*h*k);
-    jac[1][1] = a/(pow(a,2) - a*exp(rho[1]-rho[0])*h*k);
+    jac[1][0] = exp((Gammad+1)*x + rho[0])*pow(h,2)*Gamma0/(pow(a,2)*exp(rho[1])*Hub + a*exp((Gammad+1)*x+rho[0])*h*Gamma0);
+    jac[1][1] = exp(rho[1])*h*Hub/(a*exp(rho[1])*Hub + exp((Gammad+1)*x + rho[0])*h*Gamma0);
 }
 
 /*Evolution equation of rho*/
@@ -68,7 +90,7 @@ void deriv(double x, double *rho, double *drho, double Gamma0)
 {
     double h = H(x, exp(rho[0]), exp(rho[1]));
     drho[0] = -3 - (Gamma0/h)*exp((Gammad+1)*x);
-    drho[1] = -4 + (Gamma0/h)*exp((Gammad+1)*x)*exp(rho[1] - rho[0]);
+    drho[1] = -4 + (Gamma0/h)*exp((Gammad+1)*x)*exp(rho[0] - rho[1]);
 }
 
 /*BDF2 solver*/
@@ -85,17 +107,19 @@ void bdf2(double x_next, double h, double Gamma0 ,double y_prev[], double y_prev
         deriv(x_next, y_guess, df, Gamma0);
         jacobian(x_next, y_guess, Gamma0, jac, coeff[0], h);
 
+        F[0] = coeff[0]*y_guess[0]/h + coeff[1]*y_prev[0]/h + coeff[2]*y_prev2[0]/h - df[0];
+        F[1] = coeff[0]*y_guess[1]/h + coeff[1]*y_prev[1]/h + coeff[2]*y_prev2[1]/h - df[1];
+
         for (int i = 0; i < 2; i++){
-            F[i] = coeff[0]*y_guess[i] + coeff[1]*y_prev[i] + coeff[2]*y_prev2[i] - h*df[i];
             for (int j = 0; j < 2; j++){
                 delta[i] += -F[j]*jac[i][j];
             }
             y_guess[i] += delta[i];
         }
-
-        double max_delta = 0.0;
+        
+        double max_delta = TOL*1e-20;
         for (int i = 0; i < 2; i++){
-            if (fabs(F[i]) > max_delta) max_delta = fabs(F[i]); 
+            if (fabs(delta[i]) > max_delta) max_delta = fabs(delta[i]); 
         }
         if (max_delta < TOL) break;
     }
@@ -210,15 +234,54 @@ double interpolation(double a, double *rho, double *loga)
     }
 }
 
+int background_solve_my_component(struct background *pba) {
+    pba->a_size = 100;
+    class_alloc(pba->a_table, pba->a_size * sizeof(double), pba->error_message);
+    class_alloc(pba->rho_chi_table, pba->a_size * sizeof(double), pba->error_message);
+    class_alloc(pba->rho_cft_table, pba->a_size * sizeof(double), pba->error_message);
+    class_alloc(pba->Gamma_table, pba->a_size * sizeof(double), pba->error_message);
+    class_alloc(pba->H_table, pba->a_size * sizeof(double), pba->error_message);
+  
+    double a_ini = pba->atr;
+    double a_end = _AINIT_;
+    double h = -_H_STEP_;
+    double RHOC = 3.0 * pow(pba->H0, 2)/(8.0 * _PI_ * _G_)
+
+    //fill a_table with log-spaced values
+    for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = log(a_ini) + i*h;
+
+    double rho_CFT_atr = RHOC*(pba->Omega0_g)*pow(pba->atr, -4.0)*(7.0/8.0)*pow(4.0/11.0, 4.0/3.0)*(pba->DNeff);
+    double rho_ddm_atr = RHOC*(pba->Omega0_chi)*pow(pba->atr, -3.0);
+
+  
+    return 0;
+}
+
 int main()
 {
-    /*General parameters*/
-    double h = -hstep;
-    double Gamma0 = 1e3; /*Gamma(a) ~ Gamma_0 * a^(Gamma_d) in Gyr^-1*/
-    int N = (int)((log(atr) - log(ainit))/fabs(h)); /*The number of steps*/
+    const double Gamma0 = 1e3; /*Gyr^-1*/
+    const double H0 = 70.0; /*km/s/Mpc*/
 
-    /*Convert to eV units*/
-    Gamma0 *= 2.085e-50; /*eV^-1*/
+    struct background pba;
+    /*Set background parameters*/
+    pba.atr = 1e-3;
+    pba.DNeff = 0.6;
+    pba.Gamma0 = Gamma0 * _Gyr_over_Mpc_; /*(Gyr^-1) * Conversion factor = Mpc^-1*/
+    pba.Gammad = -3.5;
+    pba.H0 = H0/(1e3*_c_); /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
+    pba.Omega0_b = 0.02238280; /*Baryon*/
+    pba.Omega0_cdm = 0.0; /*CDM*/
+    pba.Omega0_chi = 0.1201075; /*Decaying dark matter*/
+    pba.Omega0_g = 8e-5; /*Photon*/
+    pba.Omega0_lambda = 0.67; /*Dark energy*/
+    pba.Omega0_ur = 1e-6; /*Neutrinos*/
+
+    free(pba.a_table);
+    free(pba.rho_cft_table);
+    free(pba.rho_chi_table);
+    free(pba.H_table);
+    free(pba.Gamma_table);
+    
 
     double rho_CFT_atr = RHOC*Omega_photon*pow(atr, -4.0)*(7.0/8.0)*pow(4.0/11.0, 4.0/3.0)*DNeff;
     double rho_ddm_atr = RHOC*Omega_ddm*pow(atr, -3.0);
@@ -227,7 +290,7 @@ int main()
 
     double jac[2][2] = {{0.0,0.0},{0.0,0.0}};
     double x = log(atr);
-    double rho_prev2[2] = {log(rho_ddm_atr) - 3*h, log(rho_CFT_atr) - 4*h};
+    double rho_prev2[2] = {log(rho_ddm_atr), log(rho_CFT_atr)};
     double rho_prev[2];
     double rho_next[2];
     double *loga = (double *)malloc(sizeof(double) * N);
@@ -251,19 +314,28 @@ int main()
         deriv(x+h, rho_prev, df, Gamma0);
         jacobian(x+h, rho_prev, Gamma0, jac, 1, h);
         for (int i = 0; i < 2; i++){
-            F[i] = rho_prev[i] - rho_prev2[i] - h*df[i];
+            F[i] = rho_prev[i]/h - rho_prev2[i]/h - df[i];
+        }
+        for (int i = 0; i < 2; i++){
             for (int j = 0; j < 2; j++){
                 delta[i] += -F[j]*jac[i][j];
             }
             rho_prev[i] += delta[i];
         }
+
+        double max_delta = TOL*1e-20;
+        for (int i = 0; i < 2; i++){
+            if (fabs(delta[i]) > max_delta) max_delta = fabs(delta[i]); 
+        }
+        if (max_delta < TOL) break;
     }
 
     /*Main BDF2 loop*/
     for (int i = 0; i < N; i++){
         x += h;
         bdf2(x, h, Gamma0, rho_prev, rho_prev2, rho_next, jac, DDM, CFT, i);
-        fprintf(output, "%e\t%e\t%e\t%e\t%e\n", x, rho_next[0], rho_next[1], H(x, exp(rho_next[0]), exp(rho_next[1])), Gamma0*exp((Gammad + 1)*x));
+        fprintf(output, "%e\t%e\t%e\t%e\t%e\t%e\n", x, rho_next[0], rho_next[1], H(x, exp(rho_next[0]),
+                exp(rho_next[1])), Gamma0*exp((Gammad)*x), log(exp(3*x)*exp(rho_next[0]) + exp(4*x)*exp(rho_next[1])));
 
         memcpy(rho_prev2, rho_prev, sizeof(double) * 2);
         memcpy(rho_prev, rho_next, sizeof(double) * 2);
@@ -276,6 +348,8 @@ int main()
     fprintf(params, "%s\t%e\n", "atr", atr);
     fprintf(params, "%s\t%e\n", "ainit", ainit);
     fclose(params); fclose(output);
+
+    
 
     /*FILE *test;
     test = fopen("test.dat", "w");
