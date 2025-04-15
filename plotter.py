@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import subprocess
 
+subprocess.run(["clear"])
 subprocess.run(["gcc", "-o", "a.out", "boltzmann.c", "-lm"])
 subprocess.run(["./a.out"])
 
@@ -63,7 +64,7 @@ axes[1].set_title(r"$\Gamma/H$")
 axes[0].legend(loc=0)
 axes[0].set_xlabel(r"$a$")
 axes[1].set_xlabel(r"$a$")
-axes[0].set_ylabel(r"$\rho$ (eV$^4$)")
+axes[0].set_ylabel(r"$\frac{8\pi G}{3}\rho$ (Mpc$^{-2}$)")
 axes[1].set_ylabel(r"$\Gamma/H$")
 axes[0].vlines(params['aeq'], 0, max(rhoddm[-1], rhoCFT[-1]), colors = "black", linestyles = 'dashed')
 axes[0].vlines(params['atr']*0.99, 0, max(rhoddm[-1], rhoCFT[-1]), colors = "green", linestyles = 'dashed')
