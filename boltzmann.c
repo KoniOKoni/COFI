@@ -27,7 +27,7 @@
 #define _PI_ 3.141592
 #define _AINIT_ 1e-10
 
-#define _TOL_ 1e-12
+#define _TOL_ 1e-20
 #define _MAX_ITER_ 100
 #define _H_STEP_ 0.1
 #define RHOC 
@@ -153,11 +153,11 @@ double d2fdh2(int idx, double *rho, struct background *pba)
     return (rho[idx-2] - 2*rho[idx-1] + rho[idx])/pow(pba->steph, 2);
 }
 
-double divdiff(int *idx, int n, double *rho, double *loga, struct background *pba)
+double divdiff(int *idx, int n, double *rho, struct background *pba)
 {
     if (n == 2){
         if (idx[1] == idx[0]) return dfdh(idx[0], rho, pba);
-        else return (rho[idx[1]] - rho[idx[0]])/(loga[idx[1]] - loga[idx[0]]);
+        else return (rho[idx[1]] - rho[idx[0]])/(pba->a_table[idx[1]] - pba->a_table[idx[0]]);
     }
     if (n == 3 && (idx[0] == idx[1] && idx[1] == idx[2])) return d2fdh2(idx[0], rho, pba)/2.0;
     else{
@@ -170,16 +170,16 @@ double divdiff(int *idx, int n, double *rho, double *loga, struct background *pb
         for (int i = 0; i < n-1; i++){
             subidx2[i] = idx[i];
         }
-        res = (divdiff(subidx1, n-1, rho, loga, pba) - divdiff(subidx2, n-1, rho, loga, pba))/(loga[idx[n-1]] - loga[idx[0]]);
+        res = (divdiff(subidx1, n-1, rho, pba) - divdiff(subidx2, n-1, rho, pba))/(pba->a_table[idx[n-1]] - pba->a_table[idx[0]]);
         free(subidx1); free(subidx2);
         return res;
     }
 }
 
 /*input a is indeed log(a)*/
-double Hermite(double a, double *rho, double *loga, struct background *pba)
+double Hermite(struct background *pba, double *rho, double a)
 {
-    int N = sizeof(loga)/sizeof(double);
+    int N = pba->a_size;
     double res = 0.0;
     double **arr;
     arr = (double **)malloc(sizeof(double *) * 9);
@@ -191,9 +191,9 @@ double Hermite(double a, double *rho, double *loga, struct background *pba)
     double x1, x2, x3;
     double diff = 1e10;
     for (int i = 0; i < N; i++){
-        if ((fabs(loga[i] - a)) < diff){
+        if ((fabs(pba->a_table[i] - a)) < diff){
         idx2 = i;
-        diff = fabs(loga[i] - a);
+        diff = fabs(pba->a_table[i] - a);
         }
     }
     if (idx2 == N-1) return rho[N-1];
@@ -201,7 +201,7 @@ double Hermite(double a, double *rho, double *loga, struct background *pba)
     idx1 = idx2+1;
     idx3 = idx2-1;
     int group[9] = {idx1, idx1, idx1, idx2, idx2, idx2, idx3, idx3, idx3};
-    x1 = loga[idx1]; x2 = loga[idx2]; x3 = loga[idx3];
+    x1 = pba->a_table[idx1]; x2 = pba->a_table[idx2]; x3 = pba->a_table[idx3];
     for (int i = 0; i < 9; i++){
         arr[0][i] = rho[group[i]];
     }
@@ -212,7 +212,7 @@ double Hermite(double a, double *rho, double *loga, struct background *pba)
             for (int k = 0; k < i+1; k++){
                 idxs[k] = group[j+k];
             }
-            arr[i][j] = divdiff(idxs, i+1, rho, loga, pba);
+            arr[i][j] = divdiff(idxs, i+1, rho, pba);
             free(idxs);
         }
     }
@@ -220,7 +220,7 @@ double Hermite(double a, double *rho, double *loga, struct background *pba)
     for (int k = 1; k < 9; k++){
         double tmp = arr[k][0];
         for (int j = 0; j <= k-1; j++){
-            tmp *= (a-loga[group[j]]);
+            tmp *= (a-pba->a_table[group[j]]);
         }
         res += tmp;
     }
@@ -233,17 +233,17 @@ double Hermite(double a, double *rho, double *loga, struct background *pba)
     return res;
 }
 
-double interpolation(double *loga, double *rho, double a, struct background *pba)
+double interpolation(struct background *pba, double *rho, double a)
 {
-    if (a > exp(loga[0])){
-        return rho[0] + 3.0 * log(exp(loga[0])/exp(a));
+    if (a > exp(pba->a_table[0])){
+        return rho[0] + 3.0 * log(exp(pba->a_table[0])/exp(a));
     }
-    else if (a <= log(_AINIT_)){
+    else if (a < log(_AINIT_)){
         printf("a must be larger than ainit.\n");
         return 1e100;
     }
     else{
-        return Hermite(a, rho, loga, pba);
+        return Hermite(pba, rho, a);
     }
 }
 
@@ -267,7 +267,7 @@ int background_solve_my_component(struct background *pba) {
     //What it actually handles is 8piG/3 * rho
     double rho_cft_atr = pow(pba->H0,2.)*(pba->Omega0_g)*pow(pba->atr, -4.)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
     double rho_chi_atr = pow(pba->H0,2.)*(pba->Omega0_chi)*pow(pba->atr, -3.);
-    double rho_prev2[2] = {log(rho_chi_atr), log(rho_cft_atr)};
+    double rho_prev2[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
     double rho_prev[2];
     double rho_next[2];
 
@@ -317,7 +317,7 @@ int main()
     pba.atr = 1e-3;
     pba.DNeff = 0.5;
     pba.Gamma0 = Gamma0*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gammad = -3;
+    pba.Gammad = -1;
     pba.H0 = H0*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.0; /*CDM*/
@@ -335,16 +335,25 @@ int main()
     FILE *output, *params;
     output = fopen("output.dat", "w");
     params = fopen("params.dat", "w");
+
+    int N = 1000;
+    double *loga = (double *)malloc(sizeof(double)*N);
+    double ai = _AINIT_;
+    double aend = 1.0;
+    double h = (log(aend) - log(ai))/N;
+    for (int i = 0; i < N; i++){
+        loga[i] = log(_AINIT_) + i*h;
+    }
     
-    /*
-    for (int i = 0; i < 1000; i++){
-        fprintf(output, "%e\t%e\t%e\t%e\t%e\n",loga[i], interpolation(pba.a_table, pba.rho_chi_table, loga[i], &pba), interpolation(pba.a_table, pba.rho_cft_table, loga[i],&pba),
-        interpolation(pba.a_table, pba.Gamma_table, loga[i],&pba),interpolation(pba.a_table, pba.H_table, loga[i],&pba));
-    }*/
-   
+    
+    for (int i = 0; i < N; i++){
+        fprintf(output, "%e\t%e\t%e\t%e\t%e\n",loga[i], interpolation(&pba, pba.rho_chi_table, loga[i]), interpolation(&pba, pba.rho_cft_table, loga[i]),
+        interpolation(&pba, pba.Gamma_table, loga[i]),interpolation(&pba, pba.H_table, loga[i]));
+    }
+   /*
     for (int i = 0; i < pba.a_size; i++){
         fprintf(output, "%e\t%e\t%e\t%e\t%e\n", pba.a_table[i], pba.rho_chi_table[i], pba.rho_cft_table[i], pba.Gamma_table[i], pba.H_table[i]);
-    }
+    }*/
 
     
       // Free memory
@@ -353,6 +362,7 @@ int main()
     free(pba.rho_cft_table);
     free(pba.H_table);
     free(pba.Gamma_table);
+    free(loga);
     
     fprintf(params, "%s\t%e\n", "aeq", _AEQ_);
     fprintf(params, "%s\t%e\n", "Gammad", pba.Gammad);

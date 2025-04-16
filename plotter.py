@@ -72,7 +72,7 @@ axes[1].vlines(params['aeq'], 0, Gammas[-1]/Hs[-1], colors = "black", linestyles
 axes[1].vlines(params['atr']*0.99, 0, Gammas[-1]/Hs[-1], colors = "green", linestyles = 'dashed')
 
 for i in range(2):
-    axes[i].set_xlim([params["ainit"], params["atr"]])
+    axes[i].set_xlim([params["ainit"], 1])
 
 
 #plt.savefig("d={}.png".format(params["Gammad"]))
