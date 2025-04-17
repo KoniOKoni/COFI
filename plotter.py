@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import subprocess
 
+G = 2.75e-115
+PI = np.pi
+
 subprocess.run(["clear"])
 subprocess.run(["gcc", "-o", "a.out", "boltzmann.c", "-lm"])
 subprocess.run(["./a.out"])
@@ -26,7 +29,7 @@ while True:
     l = dat.readline()
     if not l:
         break
-    loga, logrho_ddm, logrho_CFT, H, Gamma = list(map(float, l.strip().split()))
+    loga, logrho_ddm, logrho_CFT, Gamma, H = list(map(float, l.strip().split()))
     a.append(loga)
     rhoddm.append(logrho_ddm)
     rhoCFT.append(logrho_CFT)
@@ -42,8 +45,8 @@ while True:
 
     
 a = np.exp(np.array(a))
-rhoddm = np.exp(np.array(rhoddm))
-rhoCFT = np.exp(np.array(rhoCFT))
+rhoddm = (np.array(rhoddm))
+rhoCFT = (np.array(rhoCFT))
 Hs = np.array(Hs)
 Gammas = np.array(Gammas)
 rhot = np.exp(np.array(rhot))
@@ -66,10 +69,10 @@ axes[0].set_xlabel(r"$a$")
 axes[1].set_xlabel(r"$a$")
 axes[0].set_ylabel(r"$\frac{8\pi G}{3}\rho$ (Mpc$^{-2}$)")
 axes[1].set_ylabel(r"$\Gamma/H$")
-axes[0].vlines(params['aeq'], 0, max(rhoddm[-1], rhoCFT[-1]), colors = "black", linestyles = 'dashed')
-axes[0].vlines(params['atr']*0.99, 0, max(rhoddm[-1], rhoCFT[-1]), colors = "green", linestyles = 'dashed')
-axes[1].vlines(params['aeq'], 0, Gammas[-1]/Hs[-1], colors = "black", linestyles = 'dashed')
-axes[1].vlines(params['atr']*0.99, 0, Gammas[-1]/Hs[-1], colors = "green", linestyles = 'dashed')
+axes[0].axvline(x=params['aeq'], color = "black", linestyle = 'dashed')
+axes[0].axvline(x=params['atr']*0.99, color = "green", linestyle = 'dashed')
+axes[1].axvline(x=params['aeq'], color = "black", linestyle = 'dashed')
+axes[1].axvline(x=params['atr']*0.99, color = "green", linestyle = 'dashed')
 
 for i in range(2):
     axes[i].set_xlim([params["ainit"], 1])

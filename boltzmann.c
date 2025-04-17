@@ -27,10 +27,9 @@
 #define _PI_ 3.141592
 #define _AINIT_ 1e-10
 
-#define _TOL_ 1e-20
-#define _MAX_ITER_ 100
-#define _H_STEP_ 0.1
-#define RHOC 
+#define _RTOL_ 1e-8
+#define _ATOL_ 1e-12
+#define _MAX_ITER_ 20
 
 struct background {
     double *a_table;
@@ -60,17 +59,17 @@ struct background {
 };
 
 double coeff[3] = {1.5, -2.0, 0.5};
+double coeff2[4] = {11./6., -3., 1.5, -1./3.};
 
 /*Conformal Hubble constant in eV^-1*/
-double H(double x, double rho_ddm, double rho_CFT, struct background *pba)
+double H(double x, double *rho, struct background *pba)
 {
     double rhotot;
-    rhotot = (rho_CFT + rho_ddm) + pow(pba->H0,2)*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4*x) + pba->Omega0_lambda*exp(0.039*x));
+    rhotot = rho[0] + rho[1] + pba->H0*pba->H0*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
     if (rhotot <= 0){
         printf("Negative energy at a = %e!\n", exp(x));
-        exit(1);
     }
-    return exp(x)*sqrt(rhotot);
+    return sqrt(rhotot);
 }
 
 /*Jacobian for BDF*/
@@ -81,23 +80,36 @@ void jacobian(double x, double *rho, double a, struct background *pba)
             pba->jac[i][j] = 0;
         }
     }
-    double Hub = H(x, exp(rho[0]), exp(rho[1]), pba);
+    double Hub = H(x, rho, pba);
     double h = pba->steph;
-    double Gamma0 = pba->Gamma0;
-    double Gammad = pba->Gammad;
+    double k = pba->Gamma0/Hub;
+    double r = pow(exp(x)/pba->atr, pba->Gammad);
 
-    pba->jac[0][0] = 1./a;
+    /*
+    pba->jac[0][0] = 1./(a+h*(3.+k*r));
     pba->jac[0][1] = 0.0;
-    pba->jac[1][0] = exp((Gammad+1.)*x + rho[0])*h*Gamma0/(pow(a,2.)*pow(pba->atr, pba->Gammad)*exp(rho[1])*Hub + a*exp((Gammad+1.)*x+rho[0])*h*Gamma0);
-    pba->jac[1][1] = 1./(a + (pow(pba->atr, -pba->Gammad)*exp((pba->Gammad+1)*x + rho[0]- rho[1])*h*pba->Gamma0)/Hub);
+    pba->jac[1][0] = h*k*r/((a+4.*h)*(a+h*(3+k*r)));
+    pba->jac[1][1] = 1./(a+4.*h);
+    */
+   pba->jac[0][0] = (2 * (a + 4 * h) * Hub * Hub + h * k * r * rho[0]) /
+    (2 * (a + 4 * h) * Hub * Hub * (a + h * (3 + k * r)) - h * h * k * r * rho[0]);
+
+    pba->jac[0][1] = - (h * k * r * rho[0]) /
+    (-2 * (a + 4 * h) * Hub * Hub * (a + h * (3 + k * r)) + h * h * k * r * rho[0]);
+
+    pba->jac[1][0] = h * k * r * (2 * Hub * Hub - rho[0]) /
+    (2 * (a + 4 * h) * Hub * Hub * (a + h * (3 + k * r)) - h * h * k * r * rho[0]);
+
+    pba->jac[1][1] = (2 * Hub * Hub * (a + h * (3 + k * r)) - h * k * r * rho[0]) /
+    (2 * (a + 4 * h) * Hub * Hub * (a + h * (3 + k * r)) - h * h * k * r * rho[0]);
 }
 
 /*Evolution equation of rho*/
 void deriv(double x, double *rho, double *drho, struct background *pba)
 {
-    double h = H(x, exp(rho[0]), exp(rho[1]), pba);
-    drho[0] = -3 - (pba->Gamma0/h)*exp((pba->Gammad+1)*x)/pow(pba->atr, pba->Gammad);
-    drho[1] = -4 + (pba->Gamma0/h)*exp((pba->Gammad+1)*x)*exp(rho[0] - rho[1])/pow(pba->atr, pba->Gammad);
+    double h = H(x, rho, pba);
+    drho[0] = -3*rho[0] - (pba->Gamma0/h)*exp(pba->Gammad*x)/pow(pba->atr, pba->Gammad) * rho[0];
+    drho[1] = -4*rho[1] + (pba->Gamma0/h)*exp(pba->Gammad*x)/pow(pba->atr, pba->Gammad) * rho[0];
 }
 
 /*BDF2 solver*/
@@ -123,21 +135,59 @@ void bdf2(double x_next ,double y_prev[], double y_prev2[],
 
         for (int i = 0; i < 2; i++){
             for (int j = 0; j < 2; j++){
-                delta[i] += -F[j]*pba->jac[i][j];
+                delta[i] -= F[j]*pba->jac[i][j];
             }
             y_guess[i] += delta[i];
         }
         
         double max_delta = 0.0;
         for (int i = 0; i < 2; i++){
-            if (fabs(delta[i]) > max_delta) max_delta = fabs(delta[i]); 
+            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
         }
-        if (max_delta < _TOL_) break;
+        if (max_delta < 1) break;
     }
+    memcpy(y_next, y_guess, sizeof(double) * 2);
+}
+
+void bdf3(double x_next ,double y_prev[], double y_prev2[], double y_prev3[],
+          double y_next[], int step, struct background *pba)
+{
+    double y_guess[2];
+    double h = pba->steph;
+    memcpy(y_guess, y_prev, sizeof(double)*2);
+
+    for (int iter = 0; iter < _MAX_ITER_; iter++){
+        double F[2];
+        double df[2];
+        double delta[2] = {0.0,0.0};
+        deriv(x_next, y_guess, df, pba);
+        jacobian(x_next, y_guess, coeff2[0], pba);
+        //printf("a = %e\tdrho(chi) = %e\tdrho(cft) = %e\n",exp(x_next), df[0], df[1]); 
+
+        for (int i = 0; i < 2; i++){
+            F[i] = y_guess[i]*coeff2[0] + y_prev[i]*coeff2[1] + y_prev2[i]*coeff2[2] + y_prev3[i]*coeff2[3] - h*df[i];
+        }
+
+        for (int i = 0; i < 2; i++){
+            for (int j = 0; j < 2; j++){
+                delta[i] -= F[j]*pba->jac[i][j];
+            }
+            y_guess[i] += delta[i];
+        }
+        
+        double max_delta = 0.0;
+        for (int i = 0; i < 2; i++){
+            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
+        }
+        if (max_delta < 1) break;
+    }
+    //if (y_guess[0] < 0) y_guess[0] = 1e-30;
+    //if (y_guess[1] < 0) y_guess[1] = 1e-30;
     pba->rho_chi_table[step] = y_guess[0];
     pba->rho_cft_table[step] = y_guess[1];
-    pba->Gamma_table[step] = pba->Gamma0*exp((pba->Gammad)*x_next)/pow(pba->atr, pba->Gammad);
-    pba->H_table[step] = H(x_next, exp(y_guess[0]), exp(y_guess[1]), pba);
+    pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next)/pba->atr, pba->Gammad);
+    pba->H_table[step] = H(x_next, y_guess, pba);
+    //printf("a = %e\tdrho(chi) = %e\tdrho(cft) = %e\n",exp(x_next), df[0], df[1]); 
     memcpy(y_next, y_guess, sizeof(double) * 2);
 }
 /************************************************************************************* */
@@ -150,7 +200,7 @@ double dfdh(int idx, double *rho, struct background *pba)
 
 double d2fdh2(int idx, double *rho, struct background *pba)
 {
-    return (rho[idx-2] - 2*rho[idx-1] + rho[idx])/pow(pba->steph, 2);
+    return (rho[idx-2] - 2*rho[idx-1] + rho[idx])/(pba->steph * pba->steph);
 }
 
 double divdiff(int *idx, int n, double *rho, struct background *pba)
@@ -235,8 +285,8 @@ double Hermite(struct background *pba, double *rho, double a)
 
 double interpolation(struct background *pba, double *rho, double a)
 {
-    if (a > exp(pba->a_table[0])){
-        return rho[0] + 3.0 * log(exp(pba->a_table[0])/exp(a));
+    if (a > log(pba->atr)){
+        return rho[0]*pow(pba->atr/exp(a), 3);
     }
     else if (a < log(_AINIT_)){
         printf("a must be larger than ainit.\n");
@@ -245,6 +295,12 @@ double interpolation(struct background *pba, double *rho, double a)
     else{
         return Hermite(pba, rho, a);
     }
+}
+
+double GammaChi(double x, struct background *pba)
+{
+    if (x <= log(pba->atr)) return pba->Gamma0*pow(exp(x)/pba->atr, pba->Gammad);
+    else return 0.0;
 }
 
 int background_solve_my_component(struct background *pba) {
@@ -263,44 +319,48 @@ int background_solve_my_component(struct background *pba) {
     //fill a_table with log-spaced values
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
-    //Energy density is normalized so that it is expressed as rho = kH^2.
-    //What it actually handles is 8piG/3 * rho
-    double rho_cft_atr = pow(pba->H0,2.)*(pba->Omega0_g)*pow(pba->atr, -4.)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
-    double rho_chi_atr = pow(pba->H0,2.)*(pba->Omega0_chi)*pow(pba->atr, -3.);
-    double rho_prev2[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
+    //Here we are using normalization where 8*pi*G/3 = 1. 
+    double rho_cft_atr = pba->H0*pba->H0*(pba->Omega0_g)*pow(pba->atr, -4.)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
+    double rho_chi_atr = pba->H0*pba->H0*(pba->Omega0_chi)*pow(pba->atr, -3.);
+    double rho_prev3[2] = {rho_chi_atr, rho_cft_atr}; //Initial condition
+    double rho_prev2[2];
     double rho_prev[2];
     double rho_next[2];
+    pba->rho_chi_table[0] = rho_prev3[0]; pba->rho_cft_table[0] = rho_prev3[1]; pba->Gamma_table[0] = pba->Gamma0; pba->H_table[0] = H(x, rho_prev3, pba);
+    memcpy(rho_prev2, rho_prev3, sizeof(double)*2);
 
-    printf("%e\t%e\t%e\t%e\n", log(rho_chi_atr), log(rho_cft_atr), pba->Gamma0*exp(pba->Gammad*x)/pow(pba->atr, pba->Gammad), H(x, rho_chi_atr, rho_cft_atr, pba));
-    
-    memcpy(rho_prev, rho_prev2, sizeof(double)*2);
     for (int iter = 0; iter < _MAX_ITER_; iter++){
         double df[2];
         double F[2];
         double delta[2] = {0.0, 0.0};
-        deriv(x+pba->steph, rho_prev, df, pba);
-        jacobian(x+pba->steph, rho_prev, 1, pba);
+        deriv(x+pba->steph, rho_prev2, df, pba);
+        jacobian(x+pba->steph, rho_prev2, 1, pba);
         for (int i = 0; i < 2; i++){
-            F[i] = rho_prev[i] - rho_prev2[i] - pba->steph*df[i];
+            F[i] = rho_prev2[i] - rho_prev3[i] - pba->steph*df[i];
         }
         for (int i = 0; i < 2; i++){
             for (int j = 0; j < 2; j++){
-                delta[i] += -F[j]*pba->jac[i][j];
+                delta[i] -= F[j]*pba->jac[i][j];
             }
-            rho_prev[i] += delta[i];
+            rho_prev2[i] += delta[i];
         }
 
         double max_delta = 0.0;
         for (int i = 0; i < 2; i++){
-            if (fabs(delta[i]) > max_delta) max_delta = fabs(delta[i]); 
+            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev2[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev2[i])); 
         }
-        if (max_delta < _TOL_) break;
+        if (max_delta < 1) break;
     }
     x += pba->steph;
-    /*Main BDF2 loop*/
-    for (int i = 0; i < pba->a_size; i++){
+    pba->rho_chi_table[1] = rho_prev2[0]; pba->rho_cft_table[1] = rho_prev2[1]; pba->Gamma_table[1] = pba->Gamma0*pow(exp(x)/pba->atr, pba->Gammad); pba->H_table[1] = H(x, rho_prev2, pba);
+    x += pba->steph;
+    bdf2(x, rho_prev2, rho_prev3, rho_prev, 0, pba);
+    pba->rho_chi_table[2] = rho_prev[0]; pba->rho_cft_table[2] = rho_prev[1]; pba->Gamma_table[2] = pba->Gamma0*pow(exp(x)/pba->atr, pba->Gammad); pba->H_table[2] = H(x, rho_prev, pba);
+    /*Main BDF3 loop*/
+    for (int i = 3; i < pba->a_size; i++){
         x += pba->steph;
-        bdf2(x, rho_prev, rho_prev2, rho_next, i, pba);
+        bdf3(x, rho_prev, rho_prev2,rho_prev3,rho_next, i, pba);
+        memcpy(rho_prev3, rho_prev2, sizeof(double) * 2);
         memcpy(rho_prev2, rho_prev, sizeof(double) * 2);
         memcpy(rho_prev, rho_next, sizeof(double) * 2);
     }
@@ -309,19 +369,19 @@ int background_solve_my_component(struct background *pba) {
 
 int main()
 {
-    double Gamma0 = 1e8; /*km/s/Mpc*/
-    double H0 = 70.0; /*km/s/Mpc*/
+    double Gamma0 = 1.; /*Gyr^-1*/
+    double H0 = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
     /*Set background parameters*/
     pba.atr = 1e-3;
     pba.DNeff = 0.5;
-    pba.Gamma0 = Gamma0*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gammad = -1;
+    pba.Gamma0 = Gamma0/_Gyr_over_Mpc_; /*(Gyr^-1) * Conversion factor = Mpc^-1*/
+    pba.Gammad = -2.;
     pba.H0 = H0*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
     pba.Omega0_b = 0.02238280; /*Baryon*/
-    pba.Omega0_cdm = 0.0; /*CDM*/
-    pba.Omega0_chi = 0.1201075; /*Decaying dark matter*/
+    pba.Omega0_cdm = 0.1; /*CDM*/
+    pba.Omega0_chi = 0.3; /*Decaying dark matter*/
     pba.Omega0_g = 8e-5; /*Photon*/
     pba.Omega0_lambda = 0.67; /*Dark energy*/
     pba.Omega0_ur = 1e-6; /*Neutrinos*/
@@ -336,7 +396,7 @@ int main()
     output = fopen("output.dat", "w");
     params = fopen("params.dat", "w");
 
-    int N = 1000;
+    int N = 10000;
     double *loga = (double *)malloc(sizeof(double)*N);
     double ai = _AINIT_;
     double aend = 1.0;
@@ -345,11 +405,15 @@ int main()
         loga[i] = log(_AINIT_) + i*h;
     }
     
-    
+    //Interpolation from computed samples
     for (int i = 0; i < N; i++){
-        fprintf(output, "%e\t%e\t%e\t%e\t%e\n",loga[i], interpolation(&pba, pba.rho_chi_table, loga[i]), interpolation(&pba, pba.rho_cft_table, loga[i]),
-        interpolation(&pba, pba.Gamma_table, loga[i]),interpolation(&pba, pba.H_table, loga[i]));
+        double rho[2];
+        double rho_chi = interpolation(&pba, pba.rho_chi_table, loga[i]);
+        double rho_cft = interpolation(&pba, pba.rho_cft_table, loga[i]);
+        rho[0] = rho_chi; rho[1] = rho_cft;
+        fprintf(output, "%e\t%e\t%e\t%e\t%e\n",loga[i], rho_chi, rho_cft, GammaChi(loga[i], &pba),H(loga[i], rho, &pba));
     }
+    printf("Done.\n");
    /*
     for (int i = 0; i < pba.a_size; i++){
         fprintf(output, "%e\t%e\t%e\t%e\t%e\n", pba.a_table[i], pba.rho_chi_table[i], pba.rho_cft_table[i], pba.Gamma_table[i], pba.H_table[i]);

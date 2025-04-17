@@ -16,7 +16,7 @@ ainit = 1e-7
 aeq = 3e-4
 atr = 1e-3
 DNeff = 1.0
-Gamma0 = 1e-2 #Gyr^-1
+Gamma0 = 1e3 #Gyr^-1
 Gammad = -2
 Omega_ddm = 1e-10
 Omega_b = 0.049389
@@ -33,8 +33,8 @@ Gamma0 = Gamma0*Gyr_over_Mpc #Mpc^-1
 G = 2.75e-115 #Mpc^2
 rhocrit = 2.19e106 #Mpc^-4
 
-rho_CFT_atr = rhocrit * Omega_photon * pow(atr, -4) * (7.0/8.0) * pow(4.0/11.0, 4.0/3.0) * DNeff
-rho_ddm_atr = rhocrit * Omega_ddm * pow(atr, -3)
+rho_CFT_atr = H0**2 * Omega_photon * pow(atr, -4) * (7.0/8.0) * pow(4.0/11.0, 4.0/3.0) * DNeff
+rho_ddm_atr = H0**2 * Omega_ddm * pow(atr, -3)
 
 
 
@@ -44,19 +44,19 @@ def H(x, y):
     if rhotot < 0:
         print("At {}, rhotot is negative = {}".format(x, rhotot))
         return 1e-100
-    return sqrt((8*PI*G/3)*exp(2*x) * rhotot)
+    return sqrt(rhotot)
 
 #y = (rho_ddm, rho_CFT)
 #x = log(a)
 def BoltzmannEQ(x, y):
-    drhoddmdx = -3*y[0] - Gamma0/H(x,y) * exp((Gammad + 1)*x) * y[0]
-    drhoCFTdx = -4*y[1] + Gamma0/H(x,y) * exp((Gammad + 1)*x) * y[0]
+    drhoddmdx = -3*y[0] - Gamma0/H(x,y) * exp((Gammad*x)) * y[0]
+    drhoCFTdx = -4*y[1] + Gamma0/H(x,y) * exp((Gammad*x)) * y[0]
     return [drhoddmdx, drhoCFTdx]
 
 #Solve and plot
-sol = scipy.integrate.solve_ivp(BoltzmannEQ, [log(atr), log(ainit)], [rho_ddm_atr, rho_CFT_atr], dense_output = True, method = 'Radau', rtol = 1e-8, atol = 1e-12)
+sol = scipy.integrate.solve_ivp(BoltzmannEQ, [log(atr), log(ainit)], [rho_ddm_atr, rho_CFT_atr], dense_output = True, method = 'BDF', rtol = 1e-8, atol = 1e-12)
 a = np.linspace(log(atr), log(ainit), 1000)
-sol = (8*PI*G/3)*sol.sol(a)
+sol = sol.sol(a)
 plt.plot(a, sol[0], 'r-', label = r"$\rho_{\mathrm{ddm}}$")
 plt.plot(a, sol[1], 'b-', label = r"$\rho_{\mathrm{CFT}}$")
 if aeq < atr:
