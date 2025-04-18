@@ -2,6 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import subprocess
 
+def cftscale(a, atr):
+    if a > np.log(atr):
+        return np.exp(3*a)
+    else:
+        return np.exp(4*a)
+    
+np.vectorize(cftscale)
+
 G = 2.75e-115
 PI = np.pi
 
@@ -14,7 +22,6 @@ dat = open("output.dat", "r")
 paramdat = open("params.dat", "r")
 dat.readline()
 #dat_fo.readline()
-
 
 params = {}
 a = []
@@ -45,8 +52,8 @@ while True:
 
     
 a = np.exp(np.array(a))
-rhoddm = (np.array(rhoddm))
-rhoCFT = (np.array(rhoCFT))
+rhoddm = np.exp(np.array(rhoddm))
+rhoCFT = np.exp(np.array(rhoCFT))
 Hs = np.array(Hs)
 Gammas = np.array(Gammas)
 rhot = np.exp(np.array(rhot))
@@ -62,7 +69,7 @@ axes[0].set_xscale('log')
 axes[0].set_yscale('log')
 axes[1].set_xscale('log')
 axes[1].set_yscale('log')
-axes[0].set_title(r"$\Gamma_d = {}$".format(params["Gammad"]))
+axes[0].set_title(r"$\Gamma_d = {}$, $\Gamma_0 = {}$ km/s/Mpc".format(params["Gammad"], float(params["Gamma0"])))
 axes[1].set_title(r"$\Gamma/H$")
 axes[0].legend(loc=0)
 axes[0].set_xlabel(r"$a$")
