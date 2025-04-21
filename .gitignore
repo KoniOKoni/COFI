@@ -1,4 +1,5 @@
 *.out
+a.out
 *.dat
 *.png
 pseudo.c
