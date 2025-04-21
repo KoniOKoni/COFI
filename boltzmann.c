@@ -106,7 +106,7 @@ void jacobian(int n, double x, double *rho, struct background *pba)
         for (int j = 0; j < 2; j++){
             memcpy(rhoplus, rho, sizeof(double)*2);
             memcpy(rhominus, rho, sizeof(double)*2);
-            h = -sqrt(DBL_EPSILON)*(1+fabs(rho[j]));
+            h = fmax(sqrt(DBL_EPSILON),_RTOL_)*(_ATOL_+fabs(rho[j]));
             rhoplus[j] += h;
             rhominus[j] -= h;
             deriv(x, rhoplus, dfplus, pba);
@@ -404,7 +404,7 @@ int background_solve_my_component(struct background *pba) {
     memcpy(rho_prev, rho_prev2, sizeof(double)*2);
 
     //Newton's method once
-    for (int iter = 0; iter < _MAX_ITER_; iter++){
+    for (int iter = 0; iter < _MAX_ITER_*10; iter++){
         double df[2];
         double F[2];
         double delta[2] = {0.0, 0.0};
@@ -422,7 +422,7 @@ int background_solve_my_component(struct background *pba) {
 
         double max_delta = 0.0;
         for (int i = 0; i < 2; i++){
-            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i])); 
+            if (fabs(delta[i])/(_ATOL_*_ATOL_ + _RTOL_*_RTOL_*fabs(rho_prev[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_*_ATOL_ + _RTOL_*_RTOL_*fabs(rho_prev[i])); 
         }
         if (max_delta < 1) break;
     }
@@ -449,7 +449,7 @@ int background_solve_my_component(struct background *pba) {
 
 int main()
 {
-    double Gamma0_input = 1e6; /*km/s/Mpc*/
+    double Gamma0_input = 1e8; /*km/s/Mpc*/
     double H0 = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;

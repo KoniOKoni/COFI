@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 import subprocess
 
 def cftscale(a, atr):
-    if a > np.log(atr):
-        return np.exp(3*a)
+    if a > atr:
+        return a**3
     else:
-        return np.exp(4*a)
+        return a**4
     
 np.vectorize(cftscale)
 
@@ -56,20 +56,24 @@ rhoddm = np.exp(np.array(rhoddm))
 rhoCFT = np.exp(np.array(rhoCFT))
 Hs = np.array(Hs)
 Gammas = np.array(Gammas)
-rhot = np.exp(np.array(rhot))
+
+for i in range(len(a)):
+    rhot.append(rhoddm[i]*(a[i]**3) + rhoCFT[i]*(cftscale(a[i], params["atr"])))
+
+
 
 print("rhoddm = {}, rhoCFT = {}".format(rhoddm[-1], rhoCFT[-1]))
 
 fig, axes = plt.subplots(2,1, figsize = (16,8), constrained_layout = True)
 axes[0].plot(a, rhoddm, 'r-', label = r"$\rho_{\mathrm{ddm}}$")
 axes[0].plot(a, rhoCFT, 'b-', label = r"$\rho_{\mathrm{CFT}}$")
-#axes[0].plot(a, rhot, 'g-', label = r"$\rho_{\mathrm{tot}}$")
+axes[0].plot(a, rhot, 'g-', label = r"Total comoving density")
 axes[1].plot(a, Gammas/Hs, 'k-', label=r"$\Gamma(a)/H(a)$")
 axes[0].set_xscale('log')
 axes[0].set_yscale('log')
 axes[1].set_xscale('log')
 axes[1].set_yscale('log')
-axes[0].set_title(r"$\Gamma_d = {}$, $\Gamma_0 = {}$ km/s/Mpc".format(params["Gammad"], float(params["Gamma0"])))
+axes[0].set_title(r"$\Gamma_d = {}$, $\Gamma_0 = 10^{{{}}}$ km/s/Mpc".format(params["Gammad"], (int(np.log10(params["Gamma0"])))))
 axes[1].set_title(r"$\Gamma/H$")
 axes[0].legend(loc=0)
 axes[0].set_xlabel(r"$a$")
@@ -77,9 +81,9 @@ axes[1].set_xlabel(r"$a$")
 axes[0].set_ylabel(r"$\frac{8\pi G}{3}\rho$ (Mpc$^{-2}$)")
 axes[1].set_ylabel(r"$\Gamma/H$")
 axes[0].axvline(x=params['aeq'], color = "black", linestyle = 'dashed')
-axes[0].axvline(x=params['atr']*0.99, color = "green", linestyle = 'dashed')
+axes[0].axvline(x=params['atr'], color = "green", linestyle = 'dashed')
 axes[1].axvline(x=params['aeq'], color = "black", linestyle = 'dashed')
-axes[1].axvline(x=params['atr']*0.99, color = "green", linestyle = 'dashed')
+axes[1].axvline(x=params['atr'], color = "green", linestyle = 'dashed')
 
 for i in range(2):
     axes[i].set_xlim([params["ainit"], 1])
