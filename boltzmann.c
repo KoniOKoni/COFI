@@ -26,11 +26,11 @@
 
 #define _AEQ_ 2.93e-4 /*Scale factor at matter-radiation equality*/
 #define _PI_ 3.141592
-#define _AINIT_ 1e-10
+#define _AINIT_ 1e-8
 
 #define _RTOL_ 1e-6
 #define _ATOL_ 1e-8
-#define _MAX_ITER_ 20
+#define _MAX_ITER_ 100
 
 struct background {
     double *a_table;
@@ -72,7 +72,7 @@ double jacdet(struct background *pba)
 double H(double x, double *rho, struct background *pba)
 {
     double rhotot;
-    rhotot = (exp(rho[0]) + exp(rho[1])) + pba->H0*pba->H0*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
+    rhotot = ((rho[0]) + (rho[1])) + pba->H0*pba->H0*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
     if (rhotot <= 0){
         printf("Negative energy at a = %e!\n", exp(x));
     }
@@ -83,8 +83,8 @@ double H(double x, double *rho, struct background *pba)
 void deriv(double x, double *rho, double *drho, struct background *pba)
 {
     double h = H(x, rho, pba);
-    drho[0] = -3 - (pba->Gamma0/h)*exp(pba->Gammad*x);
-    drho[1] = -4 + exp(rho[0] - rho[1])*(pba->Gamma0/h)*exp(pba->Gammad*x);
+    drho[0] = -3*rho[0] - (pba->Gamma0/h)*exp(pba->Gammad*x)*rho[0];
+    drho[1] = -4*rho[1] + (pba->Gamma0/h)*exp(pba->Gammad*x)*rho[0];
 }
 
 void jacobian(int n, double x, double *rho, struct background *pba)
@@ -131,10 +131,18 @@ void jacobian(int n, double x, double *rho, struct background *pba)
         }
     }
     double J = jacdet(pba);
-    pba->jac[0][0] = pba->jac[1][1]/J;
-    pba->jac[0][1] = -pba->jac[0][1]/J;
-    pba->jac[1][0] = -pba->jac[1][0]/J;
-    pba->jac[1][1] = pba->jac[0][0]/J;
+    double tmp[2][2];
+
+    tmp[0][0] = pba->jac[1][1]/J;
+    tmp[1][1] = pba->jac[0][0]/J;
+    tmp[0][1] = -pba->jac[1][0]/J;
+    tmp[1][0] = -pba->jac[0][1]/J;
+
+    for (int i = 0; i < 2; i++){
+        for (int j = 0; j < 2; j++){
+            pba->jac[i][j] = tmp[i][j];
+        }
+    }
 }
 
 /*BDF solvers*/
@@ -167,9 +175,9 @@ void bdf2(double x_next ,double y_prev[], double y_prev2[],
         
         double max_delta = 0.0;
         for (int i = 0; i < 2; i++){
-            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
+            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i]-delta[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i]-delta[i])); 
         }
-        if (max_delta < 1) break;
+        if (max_delta < 1e-1) break;
     }
     pba->rho_chi_table[step] = y_guess[0];
     pba->rho_cft_table[step] = y_guess[1];
@@ -396,7 +404,7 @@ int background_solve_my_component(struct background *pba) {
     double rho_chi_atr = pba->H0*pba->H0*(pba->Omega0_chi)*pow(pba->atr, -3.);
     //double rho_prev4[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
     //double rho_prev3[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
-    double rho_prev2[2] = {log(rho_chi_atr), log(rho_cft_atr)};
+    double rho_prev2[2] = {(rho_chi_atr), (rho_cft_atr)};
     double rho_prev[2];
     double rho_next[2];
     //Save initial values
@@ -422,9 +430,9 @@ int background_solve_my_component(struct background *pba) {
 
         double max_delta = 0.0;
         for (int i = 0; i < 2; i++){
-            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i])); 
+            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i]-delta[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i]-delta[i])); 
         }
-        if (max_delta < 1) break;
+        if (max_delta < 1e-1) break;
     }
 
     x += pba->steph;
@@ -449,16 +457,16 @@ int background_solve_my_component(struct background *pba) {
 
 int main()
 {
-    double Gamma0_input = 1e8; /*km/s/Mpc*/
-    double H0 = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
+    double Gamma0_input = 1e2; /*km/s/Mpc*/
+    double H0_input = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
     /*Set background parameters*/
     pba.atr = 1e-3;
     pba.DNeff = 0.5;
+    pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
     pba.Gamma0 = Gamma0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gammad = 0.;
-    pba.H0 = H0*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
+    pba.Gammad = 0;
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.1; /*CDM*/
     pba.Omega0_chi = 0.3; /*Decaying dark matter*/
@@ -510,12 +518,12 @@ int main()
     free(pba.Gamma_table);
     free(loga);
     
-    fprintf(params, "%s\t%e\n", "aeq", _AEQ_);
-    fprintf(params, "%s\t%e\n", "Gammad", pba.Gammad);
-    fprintf(params, "%s\t%e\n", "Gamma0", Gamma0_input);
-    fprintf(params, "%s\t%e\n", "DNeff", pba.DNeff);
-    fprintf(params, "%s\t%e\n", "atr", pba.atr);
-    fprintf(params, "%s\t%e\n", "ainit", _AINIT_);
+    fprintf(params, "%s\t%.20g\n", "aeq", _AEQ_);
+    fprintf(params, "%s\t%.20g\n", "Gammad", pba.Gammad);
+    fprintf(params, "%s\t%.20g\n", "Gamma0", Gamma0_input);
+    fprintf(params, "%s\t%.20g\n", "DNeff", pba.DNeff);
+    fprintf(params, "%s\t%.20g\n", "atr", pba.atr);
+    fprintf(params, "%s\t%.20g\n", "ainit", _AINIT_);
     fclose(params); fclose(output);
 
     return 0;
