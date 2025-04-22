@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import subprocess
 
+cut = 100
+
 def cftscale(a, atr):
     if a > atr:
         return a**3
@@ -20,7 +22,6 @@ subprocess.run(["./a.out"])
 dat = open("output.dat", "r")
 #dat_fo = open("output_forward.dat", "r")
 paramdat = open("params.dat", "r")
-dat.readline()
 #dat_fo.readline()
 
 params = {}
