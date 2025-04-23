@@ -84,8 +84,8 @@ double H(double x, double *rho, struct background *pba)
 void deriv(double x, double *rho, double *drho, struct background *pba)
 {
     double h = H(x, rho, pba);
-    drho[0] = -(pba->Gamma0/h)*rho[0];
-    drho[1] = (pba->Gamma0/h)*rho[0]*exp(x);
+    drho[0] = -(pba->Gamma0/h)*rho[0]*exp(x*pba->Gammad);
+    drho[1] = (pba->Gamma0/h)*rho[0]*exp(x)*exp(x*pba->Gammad);
 }
 
 void jacobian(int n, double x, double *rho, struct background *pba)
