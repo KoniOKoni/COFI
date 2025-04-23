@@ -16,7 +16,7 @@ G = 2.75e-115
 PI = np.pi
 
 subprocess.run(["clear"])
-subprocess.run(["gcc", "-o", "a.out", "boltzmann.c", "-lm"])
+subprocess.run(["gcc","-std=gnu11" ,"-o", "a.out", "boltzmann.c", "-lm"])
 subprocess.run(["./a.out"])
 
 dat = open("output.dat", "r")
@@ -53,8 +53,8 @@ while True:
 
     
 a = np.exp(np.array(a))
-rhoddm = np.exp(np.array(rhoddm))
-rhoCFT = np.exp(np.array(rhoCFT))
+rhoddm = (np.array(rhoddm))
+rhoCFT = (np.array(rhoCFT))
 Hs = np.array(Hs)
 Gammas = np.array(Gammas)
 

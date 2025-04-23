@@ -73,7 +73,7 @@ double jacdet(struct background *pba)
 double H(double x, double *rho, struct background *pba)
 {
     double rhotot;
-    rhotot = exp(rho[0]-3*x) + exp(rho[1]-4*x) + pba->H0*pba->H0*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
+    rhotot = rho[0]/exp(3*x) + rho[1]/exp(4*x) + pow(pba->H0, 2)*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
     if (rhotot <= 0){
         printf("Negative energy at a = %e!\n", exp(x));
     }
@@ -84,8 +84,8 @@ double H(double x, double *rho, struct background *pba)
 void deriv(double x, double *rho, double *drho, struct background *pba)
 {
     double h = H(x, rho, pba);
-    drho[0] = -(pba->Gamma0/h);
-    drho[1] = (pba->Gamma0/h)*exp(rho[0]-rho[1]+x);
+    drho[0] = -(pba->Gamma0/h)*rho[0];
+    drho[1] = (pba->Gamma0/h)*rho[0]*exp(x);
 }
 
 void jacobian(int n, double x, double *rho, struct background *pba)
@@ -107,7 +107,7 @@ void jacobian(int n, double x, double *rho, struct background *pba)
         for (int j = 0; j < 2; j++){
             memcpy(rhoplus, rho, sizeof(double)*2);
             memcpy(rhominus, rho, sizeof(double)*2);
-            h = fmax(sqrt(DBL_EPSILON),_RTOL_)*(_ATOL_+fabs(rho[j]));
+            h = DBL_EPSILON;
             rhoplus[j] += h;
             rhominus[j] -= h;
             deriv(x, rhoplus, dfplus, pba);
@@ -223,7 +223,7 @@ void bdf3(double x_next ,double y_prev[], double y_prev2[], double y_prev3[],
     //if (y_guess[1] < 0) y_guess[1] = 1e-30;
     pba->rho_chi_table[step] = y_guess[0];
     pba->rho_cft_table[step] = y_guess[1];
-    pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next)/pba->atr, pba->Gammad);
+    pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
     //printf("a = %e\tdrho(chi) = %e\tdrho(cft) = %e\n",exp(x_next), df[0], df[1]); 
     memcpy(y_next, y_guess, sizeof(double) * 2);
@@ -265,7 +265,7 @@ void bdf4(double x_next ,double y_prev[], double y_prev2[], double y_prev3[], do
     //if (y_guess[1] < 0) y_guess[1] = 1e-30;
     pba->rho_chi_table[step] = y_guess[0];
     pba->rho_cft_table[step] = y_guess[1];
-    pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next)/pba->atr, pba->Gammad);
+    pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
     //printf("a = %e\tdrho(chi) = %e\tdrho(cft) = %e\n",exp(x_next), df[0], df[1]); 
     memcpy(y_next, y_guess, sizeof(double) * 2);
@@ -401,55 +401,54 @@ int background_solve_my_component(struct background *pba) {
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
     //Here we are using normalization where 8*pi*G/3 = 1. 
-    double rho_cft_atr = pba->H0*pba->H0*(pba->Omega0_g)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
-    double rho_chi_atr = pba->H0*pba->H0*(pba->Omega0_chi);
-    //double rho_prev4[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
-    //double rho_prev3[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
-    double rho_prev2[2] = {log(rho_chi_atr), log(rho_cft_atr)};
+    double rho_cft_atr = pow(pba->H0, 2)*(pba->Omega0_g)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
+    double rho_chi_atr = pow(pba->H0, 2)*(pba->Omega0_chi);
+    double rho_prev4[2] = {(rho_chi_atr), (rho_cft_atr)};//Initial condition
+    double rho_prev3[2];
+    double rho_prev2[2];
     double rho_prev[2];
     double rho_next[2];
     //Save initial values
-    pba->rho_chi_table[0] = rho_prev2[0]; pba->rho_cft_table[0] = rho_prev2[1]; pba->Gamma_table[0] = pba->Gamma0*pow(pba->atr, pba->Gammad); pba->H_table[0] = H(x, rho_prev2, pba);
-    memcpy(rho_prev, rho_prev2, sizeof(double)*2);
+    pba->rho_chi_table[0] = rho_prev4[0]; pba->rho_cft_table[0] = rho_prev4[1]; pba->Gamma_table[0] = pba->Gamma0*pow(pba->atr, pba->Gammad); pba->H_table[0] = H(x, rho_prev4, pba);
+    memcpy(rho_prev3, rho_prev4, sizeof(double)*2);
 
     //Newton's method once
     for (int iter = 0; iter < _MAX_ITER_; iter++){
         double df[2];
         double F[2];
         double delta[2] = {0.0, 0.0};
-        deriv(x+pba->steph, rho_prev, df, pba);
-        jacobian(1, x+pba->steph, rho_prev, pba);
+        deriv(x+pba->steph, rho_prev3, df, pba);
+        jacobian(1, x+pba->steph, rho_prev3, pba);
         for (int i = 0; i < 2; i++){
-            F[i] = rho_prev[i] - rho_prev2[i] - pba->steph*df[i];
+            F[i] = rho_prev3[i] - rho_prev4[i] - pba->steph*df[i];
         }
         for (int i = 0; i < 2; i++){
             for (int j = 0; j < 2; j++){
                 delta[i] -= F[j]*pba->jac[i][j];
             }
-            rho_prev[i] += delta[i];
+            rho_prev3[i] += delta[i];
         }
 
         double max_delta = 0.0;
         for (int i = 0; i < 2; i++){
-            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i]-delta[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev[i]-delta[i])); 
+            if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev3[i]-delta[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(rho_prev3[i]-delta[i])); 
         }
         if (max_delta < 1e-1) break;
     }
-
     x += pba->steph;
-    pba->rho_chi_table[1] = rho_prev[0]; pba->rho_cft_table[1] = rho_prev[1]; pba->Gamma_table[1] = pba->Gamma0*pow(exp(x), pba->Gammad); pba->H_table[1] = H(x, rho_prev, pba);
-    //x += pba->steph;
-    //bdf2(x, rho_prev3, rho_prev4, rho_prev2, 0, pba); //BDF2 once
-    //pba->rho_chi_table[2] = rho_prev2[0]; pba->rho_cft_table[2] = rho_prev2[1]; pba->Gamma_table[2] = pba->Gamma0*pow(exp(x)/pba->atr, pba->Gammad); pba->H_table[2] = H(x, rho_prev2, pba);
-    //x += pba->steph;
-    //bdf3(x, rho_prev2, rho_prev3, rho_prev4, rho_prev, 0, pba); //BDF3 once
-    //pba->rho_chi_table[3] = rho_prev[0]; pba->rho_cft_table[3] = rho_prev[1]; pba->Gamma_table[3] = pba->Gamma0*pow(exp(x)/pba->atr, pba->Gammad); pba->H_table[3] = H(x, rho_prev, pba);
-    /*Main BDF3 loop*/
-    for (int i = 2; i < pba->a_size; i++){
+    pba->rho_chi_table[1] = rho_prev3[0]; pba->rho_cft_table[1] = rho_prev3[1]; pba->Gamma_table[1] = pba->Gamma0*pow(exp(x), pba->Gammad); pba->H_table[1] = H(x, rho_prev3, pba);
+    x += pba->steph;
+    bdf2(x, rho_prev3, rho_prev4, rho_prev2, 2, pba); //BDF2 once
+    pba->rho_chi_table[2] = rho_prev2[0]; pba->rho_cft_table[2] = rho_prev2[1]; pba->Gamma_table[2] = pba->Gamma0*pow(exp(x), pba->Gammad); pba->H_table[2] = H(x, rho_prev2, pba);
+    x += pba->steph;
+    bdf3(x, rho_prev2, rho_prev3, rho_prev4, rho_prev, 3, pba); //BDF3 once
+    pba->rho_chi_table[3] = rho_prev[0]; pba->rho_cft_table[3] = rho_prev[1]; pba->Gamma_table[3] = pba->Gamma0*pow(exp(x), pba->Gammad); pba->H_table[3] = H(x, rho_prev, pba);
+    /*Main BDF4 loop*/
+    for (int i = 4; i < pba->a_size; i++){
         x += pba->steph;
-        bdf2(x, rho_prev, rho_prev2,rho_next, i, pba);
-        //memcpy(rho_prev4, rho_prev3, sizeof(double) * 2);
-        //memcpy(rho_prev3, rho_prev2, sizeof(double) * 2);
+        bdf4(x, rho_prev, rho_prev2,rho_prev3, rho_prev4, rho_next, i, pba);
+        memcpy(rho_prev4, rho_prev3, sizeof(double) * 2);
+        memcpy(rho_prev3, rho_prev2, sizeof(double) * 2);
         memcpy(rho_prev2, rho_prev, sizeof(double) * 2);
         memcpy(rho_prev, rho_next, sizeof(double) * 2);
     }
@@ -458,7 +457,7 @@ int background_solve_my_component(struct background *pba) {
 
 int main()
 {
-    double Gamma0_input = 1e4; /*Gyr^-1*/
+    double Gamma0_input = 1e5; /*Gyr^-1*/
     double H0_input = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
@@ -467,7 +466,7 @@ int main()
     pba.DNeff = 0.5;
     pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
     pba.Gamma0 = Gamma0_input*_Conversion_*1e3/_c_; /*(Gyr^-1) * Conversion factor = Mpc^-1*/
-    pba.Gammad = -3;
+    pba.Gammad = 0;
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.3; /*CDM*/
     pba.Omega0_chi = 0.3; /*Decaying dark matter*/
