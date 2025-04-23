@@ -17,6 +17,7 @@ PI = np.pi
 
 subprocess.run(["clear"])
 subprocess.run(["gcc","-std=gnu11" ,"-o", "a.out", "boltzmann.c", "-lm"])
+#subprocess.run(["g++","-std=c++17","-O2", "boltzmann.cpp", "-o" ,"boltzmann"])
 subprocess.run(["./a.out"])
 
 dat = open("output.dat", "r")

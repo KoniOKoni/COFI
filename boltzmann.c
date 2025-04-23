@@ -401,7 +401,7 @@ int background_solve_my_component(struct background *pba) {
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
     //Here we are using normalization where 8*pi*G/3 = 1. 
-    double rho_cft_atr = pow(pba->H0, 2)*(pba->Omega0_g)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
+    double rho_cft_atr = pow(pba->H0, 2)*(pba->Omega0_g)*pow(pba->atr, -4)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff)*pow(pba->atr, 3);
     double rho_chi_atr = pow(pba->H0, 2)*(pba->Omega0_chi);
     double rho_prev4[2] = {(rho_chi_atr), (rho_cft_atr)};//Initial condition
     double rho_prev3[2];
@@ -457,15 +457,15 @@ int background_solve_my_component(struct background *pba) {
 
 int main()
 {
-    double Gamma0_input = 1e5; /*Gyr^-1*/
+    double Gamma0_input = 1e9; /*km/s/Mpc*/
     double H0_input = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
     /*Set background parameters*/
-    pba.atr = 1e-3;
+    pba.atr = 2e-4;
     pba.DNeff = 0.5;
     pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gamma0 = Gamma0_input*_Conversion_*1e3/_c_; /*(Gyr^-1) * Conversion factor = Mpc^-1*/
+    pba.Gamma0 = Gamma0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
     pba.Gammad = 0;
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.3; /*CDM*/
