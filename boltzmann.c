@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
+#include <tgmath.h>
 #include <string.h>
 #include <float.h>
 
@@ -19,6 +19,7 @@
 #define _Mpc_over_m_ 3.085677581282e22  /**< conversion factor from meters to megaparsecs */
 #define _Gyr_over_Mpc_ 3.06601394e2 /**< conversion factor from megaparsecs to gigayears
                                        (c=1 units, Julian years of 365.25 days) */
+#define _Conversion_ 980.392
 #define _c_ 2.99792458e8            /**< c in m/s */
 //#define _G_ 6.67428e-11    
 #define _G_ 2.75e-115         /**< Newton constant in m^3/Kg/s^2 */
@@ -72,7 +73,7 @@ double jacdet(struct background *pba)
 double H(double x, double *rho, struct background *pba)
 {
     double rhotot;
-    rhotot = ((rho[0]) + (rho[1])) + pba->H0*pba->H0*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
+    rhotot = exp(rho[0]-3*x) + exp(rho[1]-4*x) + pba->H0*pba->H0*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
     if (rhotot <= 0){
         printf("Negative energy at a = %e!\n", exp(x));
     }
@@ -83,8 +84,8 @@ double H(double x, double *rho, struct background *pba)
 void deriv(double x, double *rho, double *drho, struct background *pba)
 {
     double h = H(x, rho, pba);
-    drho[0] = -3*rho[0] - (pba->Gamma0/h)*exp(pba->Gammad*x)*rho[0];
-    drho[1] = -4*rho[1] + (pba->Gamma0/h)*exp(pba->Gammad*x)*rho[0];
+    drho[0] = -(pba->Gamma0/h);
+    drho[1] = (pba->Gamma0/h)*exp(rho[0]-rho[1]+x);
 }
 
 void jacobian(int n, double x, double *rho, struct background *pba)
@@ -106,7 +107,7 @@ void jacobian(int n, double x, double *rho, struct background *pba)
         for (int j = 0; j < 2; j++){
             memcpy(rhoplus, rho, sizeof(double)*2);
             memcpy(rhominus, rho, sizeof(double)*2);
-            h = -fmax(sqrt(DBL_EPSILON),_RTOL_)*(_ATOL_+fabs(rho[j]));
+            h = fmax(sqrt(DBL_EPSILON),_RTOL_)*(_ATOL_+fabs(rho[j]));
             rhoplus[j] += h;
             rhominus[j] -= h;
             deriv(x, rhoplus, dfplus, pba);
@@ -365,8 +366,8 @@ double Hermite(struct background *pba, double *rho, double a)
 
 double interpolation(struct background *pba, double *rho, double a)
 {
-    if (a > log(pba->atr)){
-        return log(exp(rho[0])*pow(pba->atr/exp(a), 3));
+    if (a >= log(pba->atr)){
+        return rho[0];
     }
     else if (a < log(_AINIT_)){
         printf("a must be larger than ainit.\n");
@@ -379,12 +380,12 @@ double interpolation(struct background *pba, double *rho, double a)
 
 double GammaChi(double x, struct background *pba)
 {
-    if (x <= log(pba->atr)) return pba->Gamma0*pow(exp(x)/pba->atr, pba->Gammad);
+    if (x <= log(pba->atr)) return pba->Gamma0*pow(exp(x),pba->Gammad);
     else return 0.0;
 }
 
 int background_solve_my_component(struct background *pba) {
-    pba->a_size = 10000;
+    pba->a_size = 100000;
     class_alloc(pba->a_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_chi_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_cft_table, pba->a_size * sizeof(double), pba->error_message);
@@ -393,18 +394,18 @@ int background_solve_my_component(struct background *pba) {
   
     double a_ini = pba->atr;
     double a_end = _AINIT_;
-    pba->steph = -((log(a_ini) - log(a_end))/(double)(pba->a_size-1));
+    pba->steph = -((log(a_ini) - log(a_end))/(double)(pba->a_size));
     double x = log(a_ini);
 
     //fill a_table with log-spaced values
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
     //Here we are using normalization where 8*pi*G/3 = 1. 
-    double rho_cft_atr = pba->H0*pba->H0*(pba->Omega0_g)*pow(pba->atr, -4.)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
-    double rho_chi_atr = pba->H0*pba->H0*(pba->Omega0_chi)*pow(pba->atr, -3.);
+    double rho_cft_atr = pba->H0*pba->H0*(pba->Omega0_g)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff);
+    double rho_chi_atr = pba->H0*pba->H0*(pba->Omega0_chi);
     //double rho_prev4[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
     //double rho_prev3[2] = {log(rho_chi_atr), log(rho_cft_atr)}; //Initial condition
-    double rho_prev2[2] = {(rho_chi_atr), (rho_cft_atr)};
+    double rho_prev2[2] = {log(rho_chi_atr), log(rho_cft_atr)};
     double rho_prev[2];
     double rho_next[2];
     //Save initial values
@@ -457,7 +458,7 @@ int background_solve_my_component(struct background *pba) {
 
 int main()
 {
-    double Gamma0_input = 1e2; /*km/s/Mpc*/
+    double Gamma0_input = 1e4; /*Gyr^-1*/
     double H0_input = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
@@ -465,10 +466,10 @@ int main()
     pba.atr = 1e-3;
     pba.DNeff = 0.5;
     pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gamma0 = Gamma0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gammad = 0;
+    pba.Gamma0 = Gamma0_input*_Conversion_*1e3/_c_; /*(Gyr^-1) * Conversion factor = Mpc^-1*/
+    pba.Gammad = -3;
     pba.Omega0_b = 0.02238280; /*Baryon*/
-    pba.Omega0_cdm = 0.1; /*CDM*/
+    pba.Omega0_cdm = 0.3; /*CDM*/
     pba.Omega0_chi = 0.3; /*Decaying dark matter*/
     pba.Omega0_g = 5e-5; /*Photon*/
     pba.Omega0_lambda = 0.67; /*Dark energy*/
@@ -484,7 +485,7 @@ int main()
     output = fopen("output.dat", "w");
     params = fopen("params.dat", "w");
 
-    int N = 10000;
+    int N = pba.a_size*10;
     double *loga = (double *)malloc(sizeof(double)*N);
     double ai = _AINIT_;
     double aend = 1.0;
@@ -503,6 +504,7 @@ int main()
         rho[0] = rho_chi; rho[1] = rho_cft;
         fprintf(output, "%e\t%e\t%e\t%e\t%e\n",loga[i], rho_chi, rho_cft, GammaChi(loga[i], &pba),H(loga[i], rho, &pba));
     }*/
+   
     printf("Done.\n");
     
     for (int i = 0; i < pba.a_size; i++){
