@@ -18,7 +18,7 @@ PI = np.pi
 subprocess.run(["clear"])
 subprocess.run(["gcc","-std=gnu11" ,"-o", "a.out", "boltzmann.c", "-lm"])
 #subprocess.run(["g++","-std=c++17","-O2", "boltzmann.cpp", "-o" ,"boltzmann"])
-subprocess.run(["./a.out"])
+subprocess.run(["./a.out", "2511.8864315095788697", "-0.19999999999999973355"])
 
 dat = open("output.dat", "r")
 #dat_fo = open("output_forward.dat", "r")
@@ -69,7 +69,7 @@ for i in range(len(a)):
 print("rhoddm = {}, rhoCFT = {}".format(rhoddm[-1], rhoCFT[-1]))
 
 fig, axes = plt.subplots(2,1, figsize = (16,8), constrained_layout = True)
-axes[0].plot(a, rhoddm/np.power(a,3), 'r-', label = r"$\rho_{\mathrm{ddm}}$")
+axes[0].plot(a, rhoddm/np.power(a, 3), 'r-', label = r"$\rho_{\mathrm{ddm}}$")
 axes[0].plot(a, rhoCFT/np.power(a, 4), 'b-', label = r"$\rho_{\mathrm{CFT}}$")
 #axes[0].plot(a, rhot, 'g-', label = r"Total comoving density")
 axes[1].plot(a, Gammas/Hs, 'k-', label=r"$\Gamma(a)/H(a)$")

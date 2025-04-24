@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <tgmath.h>
+#include <math.h>
 #include <string.h>
 #include <float.h>
 
@@ -27,7 +27,7 @@
 
 #define _AEQ_ 2.93e-4 /*Scale factor at matter-radiation equality*/
 #define _PI_ 3.141592
-#define _AINIT_ 1e-16
+#define _AINIT_ 1e-8
 
 #define _RTOL_ 1e-6
 #define _ATOL_ 1e-8
@@ -385,7 +385,7 @@ double GammaChi(double x, struct background *pba)
 }
 
 int background_solve_my_component(struct background *pba) {
-    pba->a_size = 100;
+    pba->a_size = 1000;
     class_alloc(pba->a_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_chi_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_cft_table, pba->a_size * sizeof(double), pba->error_message);
@@ -455,9 +455,8 @@ int background_solve_my_component(struct background *pba) {
     return 0;
 }
 
-int main(int argc, char *argv[])
+int main()
 {
-    double Gamma0_input = (double)atof(argv[1]); /*km/s/Mpc*/
     double H0_input = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
@@ -465,8 +464,6 @@ int main(int argc, char *argv[])
     pba.atr = 1e-3;
     pba.DNeff = 0.5;
     pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gamma0 = Gamma0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gammad = (double)atof(argv[2]);
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.3; /*CDM*/
     pba.Omega0_chi = 0.3; /*Decaying dark matter*/
@@ -474,58 +471,40 @@ int main(int argc, char *argv[])
     pba.Omega0_lambda = 0.67; /*Dark energy*/
     pba.Omega0_ur = 1e-6; /*Neutrinos*/
 
-    if (background_solve_my_component(&pba) != _SUCCESS_) {
-        printf("Error: %s\n", pba.error_message);
-        return 1;
-      }
     
     printf("Interpolated rho_x(a) at selected points:\n");
-    FILE *output, *params;
-    output = fopen("output.dat", "w");
-    params = fopen("params.dat", "w");
+    FILE *output;
+    output = fopen("scan.dat", "w");
 
-    int N = pba.a_size*10;
-    double *loga = (double *)malloc(sizeof(double)*N);
-    double ai = _AINIT_;
-    double aend = 1.0;
-    double h = (log(aend) - log(ai))/N;
+    int N = 100;
+    double hGamma0 = (log(1e9) - log(1e-5))/(double)N;
+    double hGammad = (10 - (-10))/(double)N;
+    int _FLAG_ = 0;
+
     for (int i = 0; i < N; i++){
-        loga[i] = log(_AINIT_) + i*h;
+        for (int j = 0; j < N; j++){
+            _FLAG_ = 0;
+            pba.Gamma0 = exp(log(1e-5) + i*hGamma0)*1e3/_c_;
+            pba.Gammad = -10 + j*hGammad;
+            background_solve_my_component(&pba);
+            for (int k = 0; k < pba.a_size; k++){
+                if (pba.rho_cft_table[k]/pow(pba.a_table[k], 4) < 0 || pba.rho_chi_table[k]/pow(pba.a_table[k], 3) < 0) {
+                    _FLAG_ = 1;
+                    break;
+                }
+            }
+            if ((pba.rho_chi_table[pba.a_size - 1]/pow(_AINIT_, 3) > pba.rho_cft_table[pba.a_size - 1]/pow(_AINIT_, 4)) && _FLAG_ == 0){
+                fprintf(output,"%.20g\t%.20g\n", exp(log(1e-5) + i*hGamma0), pba.Gammad);
+            }
+            free(pba.a_table);
+            free(pba.rho_chi_table);
+            free(pba.rho_cft_table);
+            free(pba.Gamma_table);
+            free(pba.H_table);
+        }
     }
     
-    
-    //Interpolation from computed samples
-    /*
-    for (int i = 0; i < N; i++){
-        double rho[2];
-        double rho_chi = interpolation(&pba, pba.rho_chi_table, loga[i]);
-        double rho_cft = interpolation(&pba, pba.rho_cft_table, loga[i]);
-        rho[0] = rho_chi; rho[1] = rho_cft;
-        fprintf(output, "%e\t%e\t%e\t%e\t%e\n",loga[i], rho_chi, rho_cft, GammaChi(loga[i], &pba),H(loga[i], rho, &pba));
-    }*/
-   
-    printf("Done.\n");
-    
-    for (int i = 0; i < pba.a_size; i++){
-        fprintf(output, "%.20g\t%.20g\t%.20g\t%.20g\t%.20g\n", pba.a_table[i], pba.rho_chi_table[i], pba.rho_cft_table[i], pba.Gamma_table[i], pba.H_table[i]);
-    }
-
-    
-      // Free memory
-    free(pba.a_table);
-    free(pba.rho_chi_table);
-    free(pba.rho_cft_table);
-    free(pba.H_table);
-    free(pba.Gamma_table);
-    free(loga);
-    
-    fprintf(params, "%s\t%.20g\n", "aeq", _AEQ_);
-    fprintf(params, "%s\t%.20g\n", "Gammad", pba.Gammad);
-    fprintf(params, "%s\t%.20g\n", "Gamma0", Gamma0_input);
-    fprintf(params, "%s\t%.20g\n", "DNeff", pba.DNeff);
-    fprintf(params, "%s\t%.20g\n", "atr", pba.atr);
-    fprintf(params, "%s\t%.20g\n", "ainit", _AINIT_);
-    fclose(params); fclose(output);
+    fclose(output);
 
     return 0;
 }
