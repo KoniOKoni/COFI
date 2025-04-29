@@ -33,6 +33,9 @@
 #define _ATOL_ 1e-8
 #define _MAX_ITER_ 100
 
+#define _TRUE_ 1
+#define _FALSE_ 0
+
 struct background {
     double *a_table;
     double *rho_chi_table;
@@ -43,6 +46,7 @@ struct background {
     int a_size;
     char error_message[1024];
     double steph;
+    int has_negative;
 
     /*Today's value*/
     double H0; /**< \f$ H_0 \f$: Hubble parameter (in fact, [\f$H_0/c\f$]) in \f$ Mpc^{-1} \f$ */
