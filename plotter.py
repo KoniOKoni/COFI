@@ -2,23 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import subprocess
 
-cut = 100
-
-def cftscale(a, atr):
-    if a > atr:
-        return a**3
-    else:
-        return a**4
-    
-np.vectorize(cftscale)
-
 G = 2.75e-115
 PI = np.pi
 
 subprocess.run(["clear"])
 subprocess.run(["gcc","-std=gnu11" ,"-o", "a.out", "boltzmann.c", "-lm"])
 #subprocess.run(["g++","-std=c++17","-O2", "boltzmann.cpp", "-o" ,"boltzmann"])
-subprocess.run(["./a.out", "100", "0"])
+subprocess.run(["./a.out", str(5e4), "0"])
 
 dat = open("output.dat", "r")
 #dat_fo = open("output_forward.dat", "r")

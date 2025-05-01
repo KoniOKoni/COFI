@@ -502,30 +502,11 @@ int main(int argc, char *argv[])
     FILE *output, *params;
     output = fopen("output.dat", "w");
     params = fopen("params.dat", "w");
-
-    int N = pba.a_size*10;
-    double *loga = (double *)malloc(sizeof(double)*N);
-    double ai = _AINIT_;
-    double aend = 1.0;
-    double h = (log(aend) - log(ai))/N;
-    for (int i = 0; i < N; i++){
-        loga[i] = log(_AINIT_) + i*h;
-    }
-    
-    
-    //Interpolation from computed samples
-    /*
-    for (int i = 0; i < N; i++){
-        double rho[2];
-        double rho_chi = interpolation(&pba, pba.rho_chi_table, loga[i]);
-        double rho_cft = interpolation(&pba, pba.rho_cft_table, loga[i]);
-        rho[0] = rho_chi; rho[1] = rho_cft;
-        fprintf(output, "%e\t%e\t%e\t%e\t%e\n",loga[i], rho_chi, rho_cft, GammaChi(loga[i], &pba),H(loga[i], rho, &pba));
-    }*/
    
     printf("Done.\n");
     
     for (int i = 0; i < pba.a_size; i++){
+        if (pba.rho_chi_table[i] <= 0. || pba.rho_cft_table[i] <= 0.) break;
         fprintf(output, "%.20g\t%.20g\t%.20g\t%.20g\t%.20g\n", pba.a_table[i], pba.rho_chi_table[i], pba.rho_cft_table[i], pba.Gamma_table[i], pba.H_table[i]);
     }
 
@@ -536,7 +517,6 @@ int main(int argc, char *argv[])
     free(pba.rho_cft_table);
     free(pba.H_table);
     free(pba.Gamma_table);
-    free(loga);
     
     fprintf(params, "%s\t%.20g\n", "aeq", _AEQ_);
     fprintf(params, "%s\t%.20g\n", "Gammad", pba.Gammad);
