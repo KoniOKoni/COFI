@@ -10,20 +10,12 @@
     sprintf(error_message, "Could not allocate memory");             \
     return 1;                                                        \
   }
-
-/************************/
-/*Raw output is loged quantity.*/
-/*Exponentiating must be done to be used outside this code*/
-/************************/
-
-#define _Mpc_over_m_ 3.085677581282e22  /**< conversion factor from meters to megaparsecs */
-#define _Gyr_over_Mpc_ 3.06601394e2 /**< conversion factor from megaparsecs to gigayears
-                                       (c=1 units, Julian years of 365.25 days) */
-#define _Conversion_ 980.392
+                        
 #define _c_ 2.99792458e8            /**< c in m/s */
 //#define _G_ 6.67428e-11    
 #define _G_ 2.75e-115         /**< Newton constant in m^3/Kg/s^2 */
 #define _eV_ 1.602176487e-19        /**< 1 eV expressed in J */
+#define _year_to_Mpc_ 3.07e-7
 
 #define _AEQ_ 2.93e-4 /*Scale factor at matter-radiation equality*/
 #define _PI_ 3.141592
@@ -62,9 +54,12 @@ struct background {
     double Gammad; /*Power index*/
     double DNeff; /*Delta N_eff at a= a_tr. Assumed to be constant(?)*/
     double atr;
+    double DDM_decay_time; //Decay time 'tau' of DDM in years.
+    double f_DDM;
 
     double rho_chi_init;
     double rho_cft_init;
+
 
     int has_negative;
 };
@@ -193,10 +188,10 @@ void bdf2(double x_next ,double y_prev[], double y_prev2[],
         for (int i = 0; i < 2; i++){
             if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
         }
-        if (max_delta < 1e-1) break;
+        if (max_delta < 1) break;
     }
-    pba->rho_chi_table[step] = y_guess[0];
-    pba->rho_cft_table[step] = y_guess[1];
+    pba->rho_chi_table[step] = fmax(y_guess[0],0.);
+    pba->rho_cft_table[step] = fmax(y_guess[1],0.);
     pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
     memcpy(y_next, y_guess, sizeof(double) * 2);
@@ -232,10 +227,10 @@ void bdf3(double x_next ,double y_prev[], double y_prev2[], double y_prev3[],
         for (int i = 0; i < 2; i++){
             if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
         }
-        if (max_delta < 1e-1) break;
+        if (max_delta < 1) break;
     }
-    pba->rho_chi_table[step] = y_guess[0];
-    pba->rho_cft_table[step] = y_guess[1];
+    pba->rho_chi_table[step] = fmax(y_guess[0], 0.);
+    pba->rho_cft_table[step] = fmax(y_guess[1], 0.);
     pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
     memcpy(y_next, y_guess, sizeof(double) * 2);
@@ -271,12 +266,12 @@ void bdf4(double x_next ,double y_prev[], double y_prev2[], double y_prev3[], do
         for (int i = 0; i < 2; i++){
             if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
         }
-        if (max_delta < 1e-1) break;
+        if (max_delta < 1) break;
     }
     //if (y_guess[0] < 0) y_guess[0] = 1e-30;
     //if (y_guess[1] < 0) y_guess[1] = 1e-30;
-    pba->rho_chi_table[step] = y_guess[0];
-    pba->rho_cft_table[step] = y_guess[1];
+    pba->rho_chi_table[step] = fmax(y_guess[0], 0.);
+    pba->rho_cft_table[step] = fmax(y_guess[1], 0.);
     pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
     //printf("a = %e\tdrho(chi) = %e\tdrho(cft) = %e\n",exp(x_next), df[0], df[1]); 
@@ -405,17 +400,17 @@ int background_solve_my_component(struct background *pba) {
     class_alloc(pba->Gamma_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->H_table, pba->a_size * sizeof(double), pba->error_message);
   
-    double a_ini = pba->atr;
-    double a_end = _AINIT_;
-    pba->steph = -((log(a_ini) - log(a_end))/(double)(pba->a_size));
+    double a_ini = _AINIT_;
+    double a_end = 1.0;
+    pba->steph = ((log(a_end) - log(a_ini))/(double)(pba->a_size));
     double x = log(a_ini);
 
     //fill a_table with log-spaced values
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
     //Here we are using normalization where 8*pi*G/3 = 1. Energy density is in unit of Mpc^-2.
-    pba->rho_cft_init = pow(pba->H0, 2)*(pba->Omega0_g)*(7./8.)*pow(4./11., 4./3.)*(pba->DNeff)*exp(-4*x);
-    pba->rho_chi_init = pow(pba->H0, 2)*(pba->Omega0_chi)*exp(-3*x);
+    pba->rho_chi_init = pow(pba->H0, 2)*(pba->Omega0_cdm)*exp(-3*x)*pba->f_DDM;
+    pba->rho_cft_init = 0*pba->rho_chi_init;
 
     //Arrays for BDF iteration.
     double rho_prev4[2] = {pba->rho_chi_init, pba->rho_cft_init};//Initial condition
@@ -474,24 +469,24 @@ int background_solve_my_component(struct background *pba) {
     return 0;
 }
 
-int main(int argc, char *argv[])
+int main()
 {
-    double Gamma0_input = (double)atof(argv[1]); /*km/s/Mpc*/
     double H0_input = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
     /*Set background parameters*/
+    pba.DDM_decay_time = 378000.; //years
+    pba.f_DDM = 0.01;
     pba.atr = 1e-3;
     pba.DNeff = 0.5;
-    pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gamma0 = Gamma0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gammad = (double)atof(argv[2]);
+    pba.Gammad = 0.;
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.3; /*CDM*/
-    pba.Omega0_chi = 0.3; /*Decaying dark matter*/
-    pba.Omega0_g = 5e-5; /*Photon*/
+    pba.Omega0_g = 4.6e-5; /*Photon*/
     pba.Omega0_lambda = 0.67; /*Dark energy*/
-    pba.Omega0_ur = 1e-6; /*Neutrinos*/
+    pba.Omega0_ur = 0.001; /*Neutrinos*/
+    pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
+    pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_); /*Mpc^-1*/
 
     if (background_solve_my_component(&pba) != _SUCCESS_) {
         printf("Error: %s\n", pba.error_message);
@@ -506,7 +501,6 @@ int main(int argc, char *argv[])
     printf("Done.\n");
     
     for (int i = 0; i < pba.a_size; i++){
-        if (pba.rho_chi_table[i] <= 0. || pba.rho_cft_table[i] <= 0.) break;
         fprintf(output, "%.20g\t%.20g\t%.20g\t%.20g\t%.20g\n", pba.a_table[i], pba.rho_chi_table[i], pba.rho_cft_table[i], pba.Gamma_table[i], pba.H_table[i]);
     }
 
@@ -520,10 +514,11 @@ int main(int argc, char *argv[])
     
     fprintf(params, "%s\t%.20g\n", "aeq", _AEQ_);
     fprintf(params, "%s\t%.20g\n", "Gammad", pba.Gammad);
-    fprintf(params, "%s\t%.20g\n", "Gamma0", Gamma0_input);
+    fprintf(params, "%s\t%.20g\n", "tau", pba.DDM_decay_time);
     fprintf(params, "%s\t%.20g\n", "DNeff", pba.DNeff);
     fprintf(params, "%s\t%.20g\n", "atr", pba.atr);
     fprintf(params, "%s\t%.20g\n", "ainit", _AINIT_);
+    fprintf(params, "%s\t%.20g\n", "fddm", pba.f_DDM);
     fclose(params); fclose(output);
 
     return 0;

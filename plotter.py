@@ -8,7 +8,7 @@ PI = np.pi
 subprocess.run(["clear"])
 subprocess.run(["gcc","-std=gnu11" ,"-o", "a.out", "boltzmann.c", "-lm"])
 #subprocess.run(["g++","-std=c++17","-O2", "boltzmann.cpp", "-o" ,"boltzmann"])
-subprocess.run(["./a.out", str(5e4), "0"])
+subprocess.run(["./a.out"])
 
 dat = open("output.dat", "r")
 #dat_fo = open("output_forward.dat", "r")
@@ -49,8 +49,7 @@ rhoCFT = (np.array(rhoCFT))
 Hs = np.array(Hs)
 Gammas = np.array(Gammas)
 
-#for i in range(len(rhoCFT)):
-#    rhoCFT[i] = rhoCFT[i]/cftscale(a[i], params["atr"])
+rhoddminit = 0.3*(70*1000/299792458)**2 * np.power(a[0], -3) * params["fddm"]
 
 
 
@@ -59,23 +58,24 @@ print("rhoddm = {}, rhoCFT = {}".format(rhoddm[-1], rhoCFT[-1]))
 fig, axes = plt.subplots(2,1, figsize = (16,8), constrained_layout = True)
 axes[0].plot(a, rhoddm, 'r-', label = r"$\rho_{\mathrm{ddm}}$")
 axes[0].plot(a, rhoCFT, 'b-', label = r"$\rho_{\mathrm{CFT}}$")
+axes[0].plot(a, rhoddminit*np.power(a[0]/a, 3), 'k--', label = r"$\rho_{\mathrm{ddm}}$, no decay")
 #axes[0].plot(a, rhot, 'g-', label = r"Total comoving density")
 axes[1].plot(a, Gammas/Hs, 'k-', label=r"$\Gamma(a)/H(a)$")
 axes[0].set_xscale('log')
 axes[0].set_yscale('log')
 axes[1].set_xscale('log')
 axes[1].set_yscale('log')
-axes[0].set_title(r"$\Gamma_d = {}$, $\Gamma_0 = 10^{{{}}}$ km/s/Mpc".format(params["Gammad"], (int(np.log10(params["Gamma0"])))))
+axes[0].set_title(r"$\Gamma_d = {}$, $\tau = {}$ years".format(params["Gammad"], params["tau"]))
 axes[1].set_title(r"$\Gamma/H$")
 axes[0].legend(loc=0)
 axes[0].set_xlabel(r"$a$")
 axes[1].set_xlabel(r"$a$")
-axes[0].set_ylabel(r"Comoving densities (Mpc$^{-2}$)")
+axes[0].set_ylabel(r"Energy densities (Mpc$^{-2}$)")
 axes[1].set_ylabel(r"$\Gamma/H$")
 axes[0].axvline(x=params['aeq'], color = "black", linestyle = 'dashed')
-axes[0].axvline(x=params['atr'], color = "green", linestyle = 'dashed')
+axes[0].axvline(x=9e-4, color = "green", linestyle = 'dashed')
 axes[1].axvline(x=params['aeq'], color = "black", linestyle = 'dashed')
-axes[1].axvline(x=params['atr'], color = "green", linestyle = 'dashed')
+axes[1].axvline(x=9e-4, color = "green", linestyle = 'dashed')
 
 for i in range(2):
     axes[i].set_xlim([params["ainit"], 1])
