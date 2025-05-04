@@ -510,7 +510,9 @@ int main()
             for (int k = 0; k < pba.a_size; k++){
                 if (pba.rho_chi_table[k] <= DBL_EPSILON){
                     DNeff = 11.*pow(22., 1/3)*pba.rho_cft_table[k]*exp(4*pba.a_table[k])/(7.*pba.H0*pba.H0*pba.Omega0_g);
+                    if (DNeff >= 0.1 && DNeff <= 1){
                     fprintf(output, "%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.DDM_decay_time, DNeff);
+                    }
                     break;
                 }
             }
