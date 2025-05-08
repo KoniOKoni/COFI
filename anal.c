@@ -39,6 +39,7 @@ struct background {
     int a_size;
     char error_message[1024];
     double steph;
+    int tablesize;
 
     /*Today's value*/
     double H0; /**< \f$ H_0 \f$: Hubble parameter (in fact, [\f$H_0/c\f$]) in \f$ Mpc^{-1} \f$ */
@@ -59,10 +60,22 @@ struct background {
 
     double rho_chi_init;
     double rho_cft_init;
-
-
-    int has_negative;
 };
+
+#define BAR_WIDTH 50
+
+void print_progress(double fraction) {
+    int filled = (int)(fraction * BAR_WIDTH);
+    int empty  = BAR_WIDTH - filled;
+    int percent = (int)(fraction * 100);
+
+    printf("\r%3d%% [", percent);
+    for (int i = 0; i < filled; i++) putchar('#');
+    for (int i = 0; i < empty; i++) putchar(' ');
+    putchar(']');
+
+    fflush(stdout);
+}
 
 //Integrator coefficients
 double coeff[3] = {1.5, -2.0, 0.5};
@@ -80,10 +93,6 @@ double H(double x, double *rho, struct background *pba)
 {
     double rhotot;
     rhotot = rho[0] + rho[1] + pow(pba->H0, 2)*((pba->Omega0_b + (1 - pba->f_DDM)*pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
-    if (rho[0] < 0 || rho[1] < 0){
-        printf("Negative energy at a = %e!\n", exp(x));
-        pba->has_negative = _TRUE_;
-    }
     return sqrt(rhotot);
 }
 
@@ -194,6 +203,7 @@ void bdf2(double x_next ,double y_prev[], double y_prev2[],
     pba->rho_cft_table[step] = fmax(y_guess[1],0.);
     pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
+    pba->tablesize = step;
     memcpy(y_next, y_guess, sizeof(double) * 2);
 }
 
@@ -233,6 +243,7 @@ void bdf3(double x_next ,double y_prev[], double y_prev2[], double y_prev3[],
     pba->rho_cft_table[step] = fmax(y_guess[1], 0.);
     pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
+    pba->tablesize = step;
     memcpy(y_next, y_guess, sizeof(double) * 2);
 }
 
@@ -274,6 +285,7 @@ void bdf4(double x_next ,double y_prev[], double y_prev2[], double y_prev3[], do
     pba->rho_cft_table[step] = fmax(y_guess[1], 0.);
     pba->Gamma_table[step] = pba->Gamma0*pow(exp(x_next), pba->Gammad);
     pba->H_table[step] = H(x_next, y_guess, pba);
+    pba->tablesize = step;
     //printf("a = %e\tdrho(chi) = %e\tdrho(cft) = %e\n",exp(x_next), df[0], df[1]); 
     memcpy(y_next, y_guess, sizeof(double) * 2);
 }
@@ -393,7 +405,6 @@ double GammaChi(double x, struct background *pba)
 
 int background_solve_my_component(struct background *pba) {
     pba->a_size = 1000;
-    pba->has_negative = _FALSE_;
     class_alloc(pba->a_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_chi_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_cft_table, pba->a_size * sizeof(double), pba->error_message);
@@ -488,7 +499,7 @@ int main()
    
     printf("Done.\n");
 
-    int N = 100;
+    int N = 50, cnt = 0;
     int SUC;
     double DNeff;
 
@@ -506,17 +517,19 @@ int main()
             pba.DDM_decay_time = exp(tau_table[j]);
             pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
             SUC = background_solve_my_component(&pba);
+            
 
-            for (int k = 0; k < pba.a_size; k++){
+            for (int k = 0; k < pba.tablesize; k++){
                 if (pba.rho_chi_table[k] <= DBL_EPSILON){
                     DNeff = 11.*pow(22., 1/3)*pba.rho_cft_table[k]*exp(4*pba.a_table[k])/(7.*pba.H0*pba.H0*pba.Omega0_g);
                     if (DNeff >= 0.1 && DNeff <= 1){
                     fprintf(output, "%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.DDM_decay_time, DNeff);
+                    print_progress((double)cnt / (N*N));
                     }
                     break;
                 }
             }
-
+            cnt++;
             free(pba.a_table);
             free(pba.rho_chi_table);
             free(pba.rho_cft_table);
@@ -525,14 +538,6 @@ int main()
 
         }
     }
-    
-    fprintf(params, "%s\t%.20g\n", "aeq", _AEQ_);
-    fprintf(params, "%s\t%.20g\n", "Gammad", pba.Gammad);
-    fprintf(params, "%s\t%.20g\n", "tau", pba.DDM_decay_time);
-    fprintf(params, "%s\t%.20g\n", "DNeff", pba.DNeff);
-    fprintf(params, "%s\t%.20g\n", "atr", pba.atr);
-    fprintf(params, "%s\t%.20g\n", "ainit", _AINIT_);
-    fprintf(params, "%s\t%.20g\n", "fddm", pba.f_DDM);
     fclose(params); fclose(output);
 
     return 0;
