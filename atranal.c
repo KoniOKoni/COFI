@@ -92,7 +92,7 @@ double jacdet(struct background *pba)
 double H(double x, double *rho, struct background *pba)
 {
     double rhotot;
-    rhotot = rho[0] + rho[1] + pow(pba->H0, 2)*((pba->Omega0_b + (1 - pba->f_DDM)*pba->Omega0_cdm)*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
+    rhotot = rho[0] + rho[1] + pow(pba->H0, 2)*(pba->Omega0_b*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
     return sqrt(rhotot);
 }
 
@@ -100,7 +100,7 @@ double H(double x, double *rho, struct background *pba)
 void deriv(double x, double *rho, double *drho, struct background *pba)
 {
     double h = H(x, rho, pba);
-    if (x > log(pba->atr)){
+    if (x < log(pba->atr)){
         drho[0] = -3*rho[0] - (pba->Gamma0/h)*rho[0]*exp(x*pba->Gammad);
         drho[1] = -4*rho[1] + (pba->Gamma0/h)*rho[0]*exp(x*pba->Gammad);
     }
@@ -412,8 +412,8 @@ int background_solve_my_component(struct background *pba) {
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
     //Here we are using normalization where 8*pi*G/3 = 1. Energy density is in unit of Mpc^-2.
-    pba->rho_chi_init = pow(pba->H0, 2)*(pba->Omega0_cdm)*exp(-3*x)*pba->f_DDM;
-    pba->rho_cft_init = 0*pba->rho_chi_init;
+    pba->rho_chi_init = pow(pba->H0, 2)*(pba->Omega0_cdm)*exp(-3*x)*(1. + pba->f_DDM);
+    pba->rho_cft_init = 0.;
 
     //Arrays for BDF iteration.
     double rho_prev4[2] = {pba->rho_chi_init, pba->rho_cft_init};//Initial condition
@@ -473,10 +473,6 @@ int main()
 
     struct background pba;
     /*Set background parameters*/
-    pba.DDM_decay_time = 378000.; //years
-    pba.f_DDM = 0.01;
-    pba.atr = 1e-3;
-    pba.DNeff = 0.5;
     pba.Gammad = 0.;
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.3; /*CDM*/
@@ -486,12 +482,11 @@ int main()
     pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
     pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_); /*Mpc^-1*/
 
-    FILE *output, *params;
-    output = fopen("scan.dat", "w");
-   
-    printf("Done.\n");
+    FILE *rhoDMtau, *rhoDMatr;
+    rhoDMtau = fopen("rhoDMtau.dat", "w");
+    rhoDMatr = fopen("rhoDMatr.dat", "w");
 
-    int N = 20, cnt = 0;
+    int N = 100, cnt = 0;
     int SUC;
     double DNeff, rho_cft_atr;
 
@@ -500,37 +495,66 @@ int main()
     double *atr_table = malloc(sizeof(double) * N);
 
     for (int i = 0; i < N; i++){
-        f_table[i] = log(1e-6) + i * (log(1e-1) - log(1e-6))/((double)N);
+        f_table[i] = log(1e-4) + i * (log(1e-1) - log(1e-4))/((double)N);
         tau_table[i] = log(1) + i * (log(100e9) - log(1))/((double)N);
         atr_table[i] = log(_AINIT_ * 10) + i * (log(1.) - log(_AINIT_*10))/((double)N);
     }
 
+    pba.atr = 1./(1. + 1100.);
+    //Fix a_tr and vary tau and rho_DM_init
+    printf("Start rhoDM vs tau scanning....\n");
     for (int i = 0; i < N; i++){
-        for (int j= 0; j < N; j++){
-            for (int k = 0; k < N; k++){
-                print_progress((double)cnt / (N*N*N));
-                pba.f_DDM = exp(f_table[i]);
-                pba.DDM_decay_time = exp(tau_table[j]);
-                pba.atr = exp(atr_table[k]);
-                pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
-                SUC = background_solve_my_component(&pba);
-                rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
-                if (rho_cft_atr > 0){
-                    DNeff = 11.*pow(22., 1/3)*rho_cft_atr*exp(4*pba.atr)/(7.*pba.H0*pba.H0*pba.Omega0_g);
-                    if (DNeff >= 0.1 && DNeff <= 1.){
-                        fprintf(output, "%.20g\t%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.DDM_decay_time,pba.atr,DNeff);
-                    }
+        for (int j = 0; j < N; j++){
+            print_progress((double)cnt / (N*N));
+            pba.f_DDM = exp(f_table[i]);
+            pba.DDM_decay_time = exp(tau_table[j]);
+            pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
+            SUC = background_solve_my_component(&pba);
+            rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
+            if (rho_cft_atr > 0){
+                DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
+                if (DNeff >= 0.1 && DNeff <= 1.){
+                    fprintf(rhoDMtau, "%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.DDM_decay_time,DNeff);
                 }
-                cnt++;
-                free(pba.a_table);
-                free(pba.rho_chi_table);
-                free(pba.rho_cft_table);
-                free(pba.H_table);
-                free(pba.Gamma_table);
             }
+            cnt++;
+            free(pba.a_table);
+            free(pba.rho_chi_table);
+            free(pba.rho_cft_table);
+            free(pba.H_table);
+            free(pba.Gamma_table);
         }
     }
-    fclose(params); fclose(output);
+
+    printf("Done.\n");
+    printf("Start rhoDM vs atr scanning....\n");
+    cnt = 0;
+    pba.DDM_decay_time = 378000.;
+    pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
+    for (int i = 0; i < N; i++){
+        for (int j = 0; j < N; j++){
+            print_progress((double)cnt / (N*N));
+            pba.f_DDM = exp(f_table[i]);
+            pba.atr = exp(atr_table[j]);
+            SUC = background_solve_my_component(&pba);
+            rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
+            if (rho_cft_atr > 0){
+                DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
+                if (DNeff >= 0.1 && DNeff <= 1.){
+                    fprintf(rhoDMatr, "%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.atr,DNeff);
+                }
+            }
+            cnt++;
+            free(pba.a_table);
+            free(pba.rho_chi_table);
+            free(pba.rho_cft_table);
+            free(pba.H_table);
+            free(pba.Gamma_table);
+        }
+    }
+    printf("Done.\n");
+    fclose(rhoDMatr); fclose(rhoDMtau);
+    free(f_table); free(tau_table); free(atr_table);
 
     return 0;
 }
