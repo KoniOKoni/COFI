@@ -487,7 +487,7 @@ int main()
     rhoDMtau = fopen("rhoDMtau.dat", "w");
     rhoDMatr = fopen("rhoDMatr.dat", "w");
 
-    int N = 100, N2;
+    int N = 1000, N2;
     int SUC;
     double DNeff;
 

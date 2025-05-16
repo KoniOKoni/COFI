@@ -483,7 +483,7 @@ int main()
     rhoDMtau = fopen("rhoDMtau.dat", "w");
     rhoDMatr = fopen("rhoDMatr.dat", "w");
 
-    int N = 100, cnt = 0;
+    int N = 1000, cnt = 0;
     int SUC;
     double DNeff, rho_cft_atr, Omega_today;
 
