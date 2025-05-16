@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <float.h>
+#include <omp.h>
 
 #define _SUCCESS_ 0
 #define class_alloc(pointer, size, error_message)                    \
@@ -12,6 +13,9 @@
   }
                         
 #define _c_ 2.99792458e8            /**< c in m/s */
+//#define _G_ 6.67428e-11    
+#define _G_ 2.75e-115         /**< Newton constant in m^3/Kg/s^2 */
+#define _eV_ 1.602176487e-19        /**< 1 eV expressed in J */
 #define _year_to_Mpc_ 3.07e-7
 
 #define _AEQ_ 2.93e-4 /*Scale factor at matter-radiation equality*/
@@ -483,9 +487,9 @@ int main()
     rhoDMtau = fopen("rhoDMtau.dat", "w");
     rhoDMatr = fopen("rhoDMatr.dat", "w");
 
-    int N = 100, cnt = 0;
+    int N = 100, N2;
     int SUC;
-    double DNeff, rho_cft_atr, Omega_today;
+    double DNeff;
 
     double *f_table = malloc(sizeof(double) * N);
     double *tau_table = malloc(sizeof(double) * N);
@@ -496,64 +500,100 @@ int main()
         tau_table[i] = log(1) + i * (log(100e9) - log(1))/((double)N);
         atr_table[i] = log(_AINIT_ * 10) + i * (log(1.) - log(_AINIT_*10))/((double)N);
     }
+    double **DNeff_table = malloc(N * sizeof(double*));
+    for(int i=0; i<N; i++) DNeff_table[i] = malloc(N * sizeof(double));
+    for (int i = 0; i < N; i++){
+        for (int j = 0; j < N; j++){
+            DNeff_table[i][j] = -1.;
+        }
+    }
 
     pba.atr = 1./(1. + 1100.);
     //Fix a_tr and vary tau and rho_DM_init
     printf("Start rhoDM vs tau scanning....\n");
+    struct background pba_init = pba;
+    N2 = N*N;
+
+    #pragma omp parallel for collapse(2) schedule(dynamic)
     for (int i = 0; i < N; i++){
         for (int j = 0; j < N; j++){
-            print_progress((double)cnt / (N*N));
-            pba.f_DDM = exp(f_table[i]);
-            pba.DDM_decay_time = exp(tau_table[j]);
-            pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
-            SUC = background_solve_my_component(&pba);
-            rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
-            Omega_today = Hermite(&pba, pba.rho_chi_table, 0.)/(pba.H0*pba.H0);
+            struct background pba_local = pba_init;
+            double rho_cft_atr;
+            pba_local.f_DDM = exp(f_table[i]);
+            pba_local.DDM_decay_time = exp(tau_table[j]);
+            pba_local.Gamma0 = 1./(pba_local.DDM_decay_time*_year_to_Mpc_);
+            SUC = background_solve_my_component(&pba_local);
+            rho_cft_atr = Hermite(&pba_local, pba_local.rho_cft_table, log(pba_local.atr));
             if (rho_cft_atr > 0){
-                DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
-                if (DNeff >= 0.1 && DNeff <= 0.7 && fabs(Omega_today - pba.Omega0_cdm) < 0.1){
-                    fprintf(rhoDMtau, "%.20g\t%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.DDM_decay_time,DNeff, Omega_today - pba.Omega0_cdm);
+                DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba_local.atr, 4)/(7.*pba_local.H0*pba_local.H0*pba_local.Omega0_g);
+                if (DNeff >= 0.1 && DNeff <= 1.){
+                    DNeff_table[i][j] = DNeff;
                 }
             }
-            cnt++;
-            free(pba.a_table);
-            free(pba.rho_chi_table);
-            free(pba.rho_cft_table);
-            free(pba.H_table);
-            free(pba.Gamma_table);
+            #pragma omp critical
+            {
+                int cnt = i*N + j + 1;
+                print_progress((double)cnt / N2);
+            }
+            free(pba_local.a_table);
+            free(pba_local.rho_chi_table);
+            free(pba_local.rho_cft_table);
+            free(pba_local.H_table);
+            free(pba_local.Gamma_table);
         }
     }
-
-    printf("Done.\n");
-    printf("Start rhoDM vs atr scanning....\n");
-    cnt = 0;
-    pba.DDM_decay_time = 378000.;
-    pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
     for (int i = 0; i < N; i++){
         for (int j = 0; j < N; j++){
-            print_progress((double)cnt / (N*N));
-            pba.f_DDM = exp(f_table[i]);
-            pba.atr = exp(atr_table[j]);
-            SUC = background_solve_my_component(&pba);
-            rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
-            Omega_today = Hermite(&pba, pba.rho_chi_table, 0.)/(pba.H0*pba.H0);
+            if (DNeff_table[i][j] >= 0) fprintf(rhoDMtau, "%.20g\t%.20g\t%.20g\n", exp(f_table[i]), exp(tau_table[j]),DNeff_table[i][j]);
+        }
+    }
+    for (int i = 0; i < N; i++){
+        for (int j = 0; j < N; j++){
+            DNeff_table[i][j] = -1.;
+        }
+    }
+    printf("Done.\n");
+    printf("Start rhoDM vs atr scanning....\n");
+    pba_init = pba;
+    pba_init.DDM_decay_time = 378000.;
+    pba_init.Gamma0 = 1./(pba_init.DDM_decay_time*_year_to_Mpc_);
+    #pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int i = 0; i < N; i++){
+        for (int j = 0; j < N; j++){
+            struct background pba_local = pba_init;
+            double rho_cft_atr;
+            pba_local.f_DDM = exp(f_table[i]);
+            pba_local.atr = exp(atr_table[j]);
+            SUC = background_solve_my_component(&pba_local);
+            rho_cft_atr = Hermite(&pba_local, pba_local.rho_cft_table, log(pba_local.atr));
             if (rho_cft_atr > 0){
-                DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
-                if (DNeff >= 0.1 && DNeff <= 0.7 && fabs(Omega_today - pba.Omega0_cdm) < 0.1){
-                    fprintf(rhoDMatr, "%.20g\t%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.atr,DNeff, Omega_today - pba.Omega0_cdm);
+                DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba_local.atr, 4)/(7.*pba_local.H0*pba_local.H0*pba_local.Omega0_g);
+                if (DNeff >= 0.1 && DNeff <= 1.){
+                    DNeff_table[i][j] = DNeff;
                 }
             }
-            cnt++;
-            free(pba.a_table);
-            free(pba.rho_chi_table);
-            free(pba.rho_cft_table);
-            free(pba.H_table);
-            free(pba.Gamma_table);
+            #pragma omp critical
+            {
+                int cnt = i*N + j + 1;
+                print_progress((double)cnt / N2);
+            }
+            free(pba_local.a_table);
+            free(pba_local.rho_chi_table);
+            free(pba_local.rho_cft_table);
+            free(pba_local.H_table);
+            free(pba_local.Gamma_table);
+        }
+    }
+    for (int i = 0; i < N; i++){
+        for (int j = 0; j < N; j++){
+            if (DNeff_table[i][j] >= 0) fprintf(rhoDMatr, "%.20g\t%.20g\t%.20g\n", exp(f_table[i]), exp(atr_table[j]),DNeff_table[i][j]);
         }
     }
     printf("Done.\n");
     fclose(rhoDMatr); fclose(rhoDMtau);
     free(f_table); free(tau_table); free(atr_table);
+    for (int i = 0; i < N; i++) free(DNeff_table[i]);
+    free(DNeff_table);
 
     return 0;
 }
