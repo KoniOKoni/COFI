@@ -37,6 +37,7 @@ struct background {
     char error_message[1024];
     double steph;
     int tablesize;
+    int has_negative;
 
     /*Today's value*/
     double H0; /**< \f$ H_0 \f$: Hubble parameter (in fact, [\f$H_0/c\f$]) in \f$ Mpc^{-1} \f$ */
@@ -394,6 +395,7 @@ double GammaChi(double x, struct background *pba)
 
 int background_solve_my_component(struct background *pba) {
     pba->a_size = 1000;
+    pba->has_negative = 0;
     class_alloc(pba->a_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_chi_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_cft_table, pba->a_size * sizeof(double), pba->error_message);
@@ -460,6 +462,10 @@ int background_solve_my_component(struct background *pba) {
         memcpy(rho_prev3, rho_prev2, sizeof(double) * 2);
         memcpy(rho_prev2, rho_prev, sizeof(double) * 2);
         memcpy(rho_prev, rho_next, sizeof(double) * 2);
+        if (pba->rho_chi_table[i] < DBL_EPSILON || pba->rho_cft_table[i] < DBL_EPSILON){
+            pba->has_negative = 1;
+            return 1;
+        }
     }
     return 1;
 }
@@ -483,7 +489,7 @@ int main()
     rhoDMtau = fopen("rhoDMtau.dat", "w");
     rhoDMatr = fopen("rhoDMatr.dat", "w");
 
-    int N = 1000, cnt = 0;
+    int N = 100, cnt = 0;
     int SUC;
     double DNeff, rho_cft_atr, Omega_today;
 
@@ -492,7 +498,7 @@ int main()
     double *atr_table = malloc(sizeof(double) * N);
 
     for (int i = 0; i < N; i++){
-        f_table[i] = log(1e-4) + i * (log(1e-1) - log(1e-4))/((double)N);
+        f_table[i] = log(1e-4) + i * (log(10) - log(1e-4))/((double)N);
         tau_table[i] = log(1) + i * (log(100e9) - log(1))/((double)N);
         atr_table[i] = log(_AINIT_ * 10) + i * (log(1.) - log(_AINIT_*10))/((double)N);
     }
@@ -507,12 +513,13 @@ int main()
             pba.DDM_decay_time = exp(tau_table[j]);
             pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
             SUC = background_solve_my_component(&pba);
+            if (pba.has_negative == 1) continue;
             rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
-            Omega_today = Hermite(&pba, pba.rho_chi_table, 0.)/(pba.H0*pba.H0);
+            Omega_today = pba.rho_chi_table[pba.a_size - 1]/(pba.H0*pba.H0);
             if (rho_cft_atr > 0){
                 DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
-                if (DNeff >= 0.1 && DNeff <= 0.7 && fabs(Omega_today - pba.Omega0_cdm) < 0.1){
-                    fprintf(rhoDMtau, "%.20g\t%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.DDM_decay_time,DNeff, Omega_today - pba.Omega0_cdm);
+                if ((DNeff >= 0.1 && DNeff <= 0.7) && ((Omega_today/pba.Omega0_cdm) >= 0.9 && (Omega_today/pba.Omega0_cdm) <= 1.1)){
+                    fprintf(rhoDMtau, "%.20g\t%.20g\t%.20g\t%.20g\n", pba.rho_chi_table[0], pba.DDM_decay_time,DNeff, Omega_today/pba.Omega0_cdm);
                 }
             }
             cnt++;
@@ -523,6 +530,8 @@ int main()
             free(pba.Gamma_table);
         }
     }
+
+    //(DNeff >= 0.1 && DNeff <= 0.7) && ((Omega_today/pba.Omega0_cdm) >= 0.9 && (Omega_today/pba.Omega0_cdm) <= 1.1)
 
     printf("Done.\n");
     printf("Start rhoDM vs atr scanning....\n");
@@ -535,12 +544,13 @@ int main()
             pba.f_DDM = exp(f_table[i]);
             pba.atr = exp(atr_table[j]);
             SUC = background_solve_my_component(&pba);
+            if (pba.has_negative == 1) continue;
             rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
-            Omega_today = Hermite(&pba, pba.rho_chi_table, 0.)/(pba.H0*pba.H0);
+            Omega_today = pba.rho_chi_table[pba.a_size - 1]/(pba.H0*pba.H0);
             if (rho_cft_atr > 0){
                 DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
-                if (DNeff >= 0.1 && DNeff <= 0.7 && fabs(Omega_today - pba.Omega0_cdm) < 0.1){
-                    fprintf(rhoDMatr, "%.20g\t%.20g\t%.20g\t%.20g\n", pba.f_DDM, pba.atr,DNeff, Omega_today - pba.Omega0_cdm);
+                if ((DNeff >= 0.1 && DNeff <= 0.7) && ((Omega_today/pba.Omega0_cdm) >= 0.9 && (Omega_today/pba.Omega0_cdm) <= 1.1)){
+                    fprintf(rhoDMatr, "%.20g\t%.20g\t%.20g\t%.20g\n", pba.rho_chi_table[0], pba.atr,DNeff, Omega_today/pba.Omega0_cdm);
                 }
             }
             cnt++;
