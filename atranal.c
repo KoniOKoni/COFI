@@ -38,6 +38,7 @@ struct background {
     double steph;
     int tablesize;
     int has_negative;
+    int cross_atr;
 
     /*Today's value*/
     double H0; /**< \f$ H_0 \f$: Hubble parameter (in fact, [\f$H_0/c\f$]) in \f$ Mpc^{-1} \f$ */
@@ -58,6 +59,7 @@ struct background {
 
     double rho_chi_init;
     double rho_cft_init;
+    double rho_cft_atr;
 };
 
 #define BAR_WIDTH 50
@@ -396,6 +398,7 @@ double GammaChi(double x, struct background *pba)
 int background_solve_my_component(struct background *pba) {
     pba->a_size = 1000;
     pba->has_negative = 0;
+    pba->cross_atr = 0;
     class_alloc(pba->a_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_chi_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->rho_cft_table, pba->a_size * sizeof(double), pba->error_message);
@@ -466,6 +469,10 @@ int background_solve_my_component(struct background *pba) {
             pba->has_negative = 1;
             return 1;
         }
+        if (x >= log(pba->atr) && pba->cross_atr == _FALSE_){
+            pba->rho_cft_atr = rho_prev[1];
+            pba->cross_atr = _TRUE_;
+        }
     }
     return 1;
 }
@@ -514,7 +521,7 @@ int main()
             pba.Gamma0 = 1./(pba.DDM_decay_time*_year_to_Mpc_);
             SUC = background_solve_my_component(&pba);
             if (pba.has_negative == 1) continue;
-            rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
+            rho_cft_atr = pba.rho_cft_atr;
             Omega_today = pba.rho_chi_table[pba.a_size - 1]/(pba.H0*pba.H0);
             if (rho_cft_atr > 0){
                 DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
@@ -545,7 +552,7 @@ int main()
             pba.atr = exp(atr_table[j]);
             SUC = background_solve_my_component(&pba);
             if (pba.has_negative == 1) continue;
-            rho_cft_atr = Hermite(&pba, pba.rho_cft_table, log(pba.atr));
+            rho_cft_atr = pba.rho_cft_atr;
             Omega_today = pba.rho_chi_table[pba.a_size - 1]/(pba.H0*pba.H0);
             if (rho_cft_atr > 0){
                 DNeff = 11.*pow(22., 1/3)*rho_cft_atr*pow(pba.atr, 4)/(7.*pba.H0*pba.H0*pba.Omega0_g);
