@@ -16,9 +16,9 @@
 
 #define _AEQ_ 2.93e-4 /*Scale factor at matter-radiation equality*/
 #define _PI_ 3.141592
-#define _AINIT_ 1e-10
+#define _AINIT_ 1e-14
 
-#define _RTOL_ 1e-6
+#define _RTOL_ 0.
 #define _ATOL_ 1e-8
 #define _MAX_ITER_ 100
 
@@ -92,7 +92,7 @@ double jacdet(struct background *pba)
 double H(double x, double *rho, struct background *pba)
 {
     double rhotot;
-    rhotot = rho[0] + rho[1] + pow(pba->H0, 2)*(pba->Omega0_b*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
+    rhotot = exp(rho[0]) + exp(rho[1]) + pow(pba->H0, 2)*(pba->Omega0_b*exp(-3.*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4.*x) + pba->Omega0_lambda);
     return sqrt(rhotot);
 }
 
@@ -101,12 +101,12 @@ void deriv(double x, double *rho, double *drho, struct background *pba)
 {
     double h = H(x, rho, pba);
     if (x < log(pba->atr)){
-        drho[0] = -3*rho[0] - (pba->Gamma0/h)*rho[0]*exp(x*pba->Gammad);
-        drho[1] = -4*rho[1] + (pba->Gamma0/h)*rho[0]*exp(x*pba->Gammad);
+        drho[0] = -3 - (pba->Gamma0/h);
+        drho[1] = -4 + (pba->Gamma0/h)*exp(rho[0] - rho[1]);
     }
     else{
-        drho[0] = -3*rho[0];
-        drho[1] = -3*rho[1];
+        drho[0] = -3;
+        drho[1] = -3;
     }
 }
 
@@ -131,7 +131,7 @@ void jacobian(int n, double x, double *rho, struct background *pba)
         for (int j = 0; j < 2; j++){
             memcpy(rhoplus, rho, sizeof(double)*2);
             memcpy(rhominus, rho, sizeof(double)*2);
-            h = sqrt(DBL_EPSILON)*(1+fabs(rho[j]));
+            h = fmax(sqrt(DBL_EPSILON)*(1+fabs(rho[j])), sqrt(DBL_EPSILON));
             rhoplus[j] += h;
             rhominus[j] -= h;
             deriv(x, rhoplus, dfplus, pba);
@@ -203,7 +203,7 @@ void bdf2(double x_next ,double y_prev[], double y_prev2[],
         for (int i = 0; i < 2; i++){
             if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
         }
-        if (max_delta < 1) break;
+        if (max_delta < 1e-1) break;
     }
     pba->rho_chi_table[step] = y_guess[0];
     pba->rho_cft_table[step] = y_guess[1];
@@ -243,7 +243,7 @@ void bdf3(double x_next ,double y_prev[], double y_prev2[], double y_prev3[],
         for (int i = 0; i < 2; i++){
             if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
         }
-        if (max_delta < 1) break;
+        if (max_delta < 1e-1) break;
     }
     pba->rho_chi_table[step] = y_guess[0];
     pba->rho_cft_table[step] = y_guess[1];
@@ -283,7 +283,7 @@ void bdf4(double x_next ,double y_prev[], double y_prev2[], double y_prev3[], do
         for (int i = 0; i < 2; i++){
             if (fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])) > max_delta) max_delta = fabs(delta[i])/(_ATOL_ + _RTOL_*fabs(y_guess[i])); 
         }
-        if (max_delta < 1) break;
+        if (max_delta < 1e-1) break;
     }
     //if (y_guess[0] < 0) y_guess[0] = 1e-30;
     //if (y_guess[1] < 0) y_guess[1] = 1e-30;
@@ -414,10 +414,11 @@ int background_solve_my_component(struct background *pba) {
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
     //Here we are using normalization where 8*pi*G/3 = 1. Energy density is in unit of Mpc^-2.
-    double rhocrit_init = (pba->H0 * pba->H0)*((pba->Omega0_b + pba->Omega0_cdm)*exp(-3*x) + (pba->Omega0_g + pba->Omega0_ur)*exp(-4*x) + pba->Omega0_lambda);
-    pba->rho_chi_init = 0.1301075*rhocrit_init;
-    double f = (1./3.)*exp(6*x) * pba->rho_chi_init * pba->Gamma0 / (pow(pba->H0, 3.)*(pba->Omega0_g + pba->Omega0_ur));
+    pba->rho_chi_init = 0.1301075*pba->H0*pba->H0*exp(-3*x);
+    double f = (1./3.)*exp(6*x) * pba->rho_chi_init * pba->Gamma0 / (pow(pba->H0, 3.)*sqrt((pba->Omega0_g + pba->Omega0_ur)));
     pba->rho_cft_init = f*pba->H0*pba->H0*exp(-4*x);
+    pba->rho_chi_init = log(pba->rho_chi_init);
+    pba->rho_cft_init = log(pba->rho_cft_init);
 
     //Arrays for BDF iteration.
     double rho_prev4[2] = {pba->rho_chi_init, pba->rho_cft_init};//Initial condition
@@ -467,10 +468,6 @@ int background_solve_my_component(struct background *pba) {
         memcpy(rho_prev3, rho_prev2, sizeof(double) * 2);
         memcpy(rho_prev2, rho_prev, sizeof(double) * 2);
         memcpy(rho_prev, rho_next, sizeof(double) * 2);
-        if (pba->rho_chi_table[i] < DBL_EPSILON || pba->rho_cft_table[i] < DBL_EPSILON){
-            pba->has_negative = 1;
-            return 1;
-        }
         if (x >= log(pba->atr) && pba->cross_atr == _FALSE_){
             pba->rho_cft_atr = rho_prev[1];
             pba->cross_atr = _TRUE_;
@@ -481,25 +478,25 @@ int background_solve_my_component(struct background *pba) {
 
 int main()
 {
-    double H0_input = 70.0; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
+    double H0_input = 67.4; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
 
     struct background pba;
     /*Set background parameters*/
     pba.Gammad = 0.;
     pba.Omega0_b = 0.02238280; /*Baryon*/
-    pba.Omega0_cdm = 0.3; /*CDM*/
-    pba.Omega0_g = 4.6e-5; /*Photon*/
+    pba.Omega0_cdm = 0.12; /*CDM*/
+    pba.Omega0_g = 5.44e-5; /*Photon*/
     pba.Omega0_lambda = 0.67; /*Dark energy*/
-    pba.Omega0_ur = 0.001; /*Neutrinos*/
+    pba.Omega0_ur = 3.70e-5; /*Neutrinos*/
     pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gamma0 = 1e6;
+    pba.Gamma0 = 1e10*1e3/_c_;
     pba.atr = 1./(1.+1e4);
 
     int SUC = background_solve_my_component(&pba);
     FILE* output;
     output = fopen("output.dat", "w");
     for (int i = 0; i < pba.tablesize; i++){
-        fprintf(output, "%.20g\t%.20g\t%.20g\t%.20g\t%.20g\n", pba.a_table[i], pba.rho_chi_table[i], pba.rho_cft_table[i], pba.Gamma_table[i], pba.H_table[i]);
+        fprintf(output, "%.5g\t%.5g\t%.5g\t%.5g\t%.5g\n", pba.a_table[i], (pba.rho_chi_table[i]), (pba.rho_cft_table[i]), pba.Gamma_table[i], pba.H_table[i]);
     }
 
     free(pba.a_table); free(pba.rho_cft_table); free(pba.rho_chi_table); free(pba.H_table); free(pba.Gamma_table);

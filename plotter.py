@@ -36,8 +36,8 @@ while True:
 
     
 a = np.exp(np.array(a))
-rhoddm = (np.array(rhoddm))
-rhoCFT = (np.array(rhoCFT))
+rhoddm = np.exp(np.array(rhoddm))
+rhoCFT = np.exp(np.array(rhoCFT))
 Hs = np.array(Hs)
 Gammas = np.array(Gammas)
 
