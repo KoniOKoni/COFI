@@ -4,6 +4,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from math import pi
+from scipy import interpolate
 
 # import classy module
 from classy import Class
@@ -30,8 +31,8 @@ COFI.set({'omega_ini_dcdm':0.5, 'omega_ini_dr':10, 'Gamma_dcdm': 1e7, 'a_tr': a_
 COFI.compute()
 
 print(COFI.Neff())
+print(COFI.Neff_atr())
 print(COFI.Neff_max())
-print(COFI.Neff_max() - COFI.Neff())
 print(COFI.omega_dcdm())
 print(COFI.omega_dr())
 print(COFI.omega_dcdmdr())
@@ -45,49 +46,27 @@ z = bak['z']
 rho_dr = bak['(.)rho_dr']
 rho_dcdm = bak['(.)rho_dcdm']
 rho_g = bak['(.)rho_g']
+Omega_r = bak['(.)Omega_r']
 rho_crit = bak['(.)rho_crit']
+rho_r = Omega_r * rho_crit
 
-a = 1./(1.+z)
+neff = (rho_r - rho_g) / ((7./8.) * (4./11)**(4./3.) * rho_g)
+print(neff)
 
-data = open('output.dat', 'r')
+neff_interp = interpolate.interp1d(z, neff, bounds_error=False, fill_value='extrapolate')
+print(neff_interp(z_tr))
+print(max(neff))
 
-a_SHK = []
-rho_dcdm_SHK = []
-rho_dr_SHK = []
+plt.plot(z, neff)
+plt.axvline(x=z_tr, color='red', linestyle='--', label='z_tr = {:.2f}'.format(z_tr))
 
-while True:
-    l = data.readline()
-    if not l:
-        break
-    tmp1, tmp2, tmp3 = map(float, l.strip().split(','))
-    a_SHK.append(np.exp(tmp1))
-    rho_dcdm_SHK.append(np.exp(tmp2))
-    rho_dr_SHK.append(np.exp(tmp3))
-    
-rho_dr_SHK = np.array(rho_dr_SHK)
-rho_dcdm_SHK = np.array(rho_dcdm_SHK)
-a_SHK = np.array(a_SHK)
-
-rho_g = 5.378150968509925e-05 * np.power(a_SHK, -4.)
-
-neff = (rho_dr_SHK) / ((7./8.) * (4./11)**(4./3.) * rho_g) + COFI.Neff()
-
-"""
-plt.plot(a, rho_dr, label='$\\rho_\mathrm{dr}^\mathrm{CLASS}$')
-plt.plot(a, rho_dcdm, label='$\\rho_\mathrm{dcdm}^\mathrm{CLASS}$')
-plt.plot(a_SHK, rho_dr_SHK, label='$\\rho_\mathrm{dr}^\mathrm{SHK}$')
-plt.plot(a_SHK, rho_dcdm_SHK, label='$\\rho_\mathrm{dcdm}^\mathrm{SHK}$')
-"""
-
-plt.plot(a_SHK, neff)
-
+plt.xlim(z_tr/5, z[0])
+plt.ylim(2, 5)
 plt.xscale('log')
 plt.yscale('linear')
-plt.xlabel('a')
-plt.ylabel('$\\rho$')
-plt.ylim(2, 5)
-plt.legend()
-plt.title('Background energy density')
-#plt.gca().invert_xaxis()
+plt.xlabel('z')
+plt.ylabel('$\Delta N_\mathrm{eff}$')
+plt.title('Neff over z')
+plt.gca().invert_xaxis()
 
 plt.show()

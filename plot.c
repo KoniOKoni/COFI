@@ -32,6 +32,7 @@ struct background {
     double *rho_cft_table;
     double *Gamma_table;
     double *H_table;
+    double *Neff_table;
     double jac[2][2];
     int a_size;
     char error_message[1024];
@@ -56,11 +57,13 @@ struct background {
     double atr;
     double DDM_decay_time; //Decay time 'tau' of DDM in years.
     double Omega_init;
-    double Omega_dcdm_init;
+    double omega_dcdm_init;
+    double omega_dr_init;
 
     double rho_chi_init;
     double rho_cft_init;
     double rho_cft_atr;
+    double h2;
 };
 
 //Integrator coefficients
@@ -382,7 +385,7 @@ double GammaChi(double x, struct background *pba)
 }
 
 int background_solve_my_component(struct background *pba) {
-    pba->a_size = 1000;
+    pba->a_size = 4000;
     pba->has_negative = 0;
     pba->cross_atr = 0;
     class_alloc(pba->a_table, pba->a_size * sizeof(double), pba->error_message);
@@ -390,6 +393,7 @@ int background_solve_my_component(struct background *pba) {
     class_alloc(pba->rho_cft_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->Gamma_table, pba->a_size * sizeof(double), pba->error_message);
     class_alloc(pba->H_table, pba->a_size * sizeof(double), pba->error_message);
+    class_alloc(pba->Neff_table, pba->a_size * sizeof(double), pba->error_message);
   
     double a_ini = _AINIT_;
     double a_end = 1.0;
@@ -400,9 +404,8 @@ int background_solve_my_component(struct background *pba) {
     for (int i = 0; i < pba->a_size; i++) pba->a_table[i] = x + i*(pba->steph);
 
     //Here we are using normalization where 8*pi*G/3 = 1. Energy density is in unit of Mpc^-2.
-    pba->rho_chi_init = pba->Omega_dcdm_init*pba->H0*pba->H0*exp(-3*x);
-    double f = (1./3.)*exp(6*x) * pba->rho_chi_init * pba->Gamma0 / (pow(pba->H0, 3.)*sqrt((pba->Omega0_g + pba->Omega0_ur)));
-    pba->rho_cft_init = f*pba->H0*pba->H0*exp(-4*x);
+    pba->rho_chi_init = pba->omega_dcdm_init*pba->H0*pba->H0*exp(-3*x);
+    pba->rho_cft_init = pba->omega_dr_init*pba->H0*pba->H0*exp(-3*x);
     pba->rho_chi_init = log(pba->rho_chi_init);
     pba->rho_cft_init = log(pba->rho_cft_init);
 
@@ -464,29 +467,36 @@ int background_solve_my_component(struct background *pba) {
 
 int main(int argc, char* argv[])
 {
-    double H0_input = 67.8; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
+    double H0_input = 68.; /*km/s/Mpc. This is test input. Real code will get theta as input.*/
+    double h2 = 0.68 * 0.68;
 
     struct background pba;
     /*Set background parameters*/
     pba.Gammad = 0.;
+    pba.h2 = h2;
     pba.Omega0_b = 0.02238280; /*Baryon*/
     pba.Omega0_cdm = 0.283037; /*CDM*/
     pba.Omega0_g = 5.378150968509925e-05; /*Photon*/
     pba.Omega0_lambda = 0.661158039093809; /*Dark energy*/
     pba.Omega0_ur = 0.; /*Neutrinos*/
     pba.H0 = H0_input*1e3/_c_; /*(km/s/Mpc) * Conversion factor = Mpc^-1*/
-    pba.Gamma0 = 1e3*1e3/_c_;
+    pba.Gamma0 = 1e6*1e3/_c_;
     pba.atr = 1./(1.+1e4);
-    pba.Omega_dcdm_init = atof(argv[1]);
+    pba.omega_dcdm_init = atof(argv[1]);
+    pba.omega_dr_init = atof(argv[2]);
 
     int SUC = background_solve_my_component(&pba);
+
+    for (int i = 0; i < pba.tablesize; i++){
+        pba.Neff_table[i] = (exp(pba.rho_cft_table[i])) / ((7./8.) * pow((4./11),(4./3.)) * pba.Omega0_g*exp(-4*pba.a_table[i]));
+    }
     FILE* output;
     output = fopen("output.dat", "w");
     for (int i = 0; i < pba.tablesize; i++){
         fprintf(output, "%.5g,%.5g,%.5g\n", pba.a_table[i], (pba.rho_chi_table[i]), (pba.rho_cft_table[i]));
     }
 
-    free(pba.a_table); free(pba.rho_cft_table); free(pba.rho_chi_table); free(pba.H_table); free(pba.Gamma_table);
+    free(pba.a_table); free(pba.rho_cft_table); free(pba.rho_chi_table); free(pba.H_table); free(pba.Gamma_table); free(pba.Neff_table);
     fclose(output);
     
 

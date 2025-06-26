@@ -10,7 +10,7 @@ from classy import Class
 
 
 
-common_settings = {'omega_b':0.0223828,'100*theta_s':1.0399625783900215,
+common_settings = {'Omega_b':0.0223828,'100*theta_s':1.0399625783900215,
                    'A_s':2.100549e-09,'n_s':0.9660499,'tau_reio':0.05430842,
                    'N_ur':2.046,'N_ncdm':1,'m_ncdm':0.06,'T_ncdm':0.7137658555036082,'YHe':'BBN',
                    'output':'tCl,pCl,lCl,mPk','lensing':'yes','P_k_max_1/Mpc':3.0,'non linear':'halofit'}
@@ -24,7 +24,7 @@ a_tr = 1 / (1 + z_tr)
 
 
 COFI = Class()
-COFI.set({'omega_ini_dcdm':0.1301075, 'Gamma_dcdm': 1e10, 'a_tr': a_tr})
+COFI.set({'omega_ini_dcdm':0.1301075, 'Gamma_dcdm': 1e6, 'a_tr': a_tr})
 COFI.compute()
 
 bak = COFI.get_background()

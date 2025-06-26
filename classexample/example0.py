@@ -26,7 +26,7 @@ a_tr = 1 / (1 + z_tr)
 
 COFI = Class()
 COFI.set(common_settings)
-COFI.set({'omega_ini_dcdm':0.5, 'omega_ini_dr':10, 'Gamma_dcdm': 1e7, 'a_tr': a_tr})
+COFI.set({'omega_ini_dcdm':0.5, 'omega_ini_dr':10, 'Gamma_dcdm': 1e10, 'a_tr': a_tr})
 COFI.compute()
 
 print(COFI.Neff())
@@ -49,43 +49,13 @@ rho_crit = bak['(.)rho_crit']
 
 a = 1./(1.+z)
 
-data = open('output.dat', 'r')
-
-a_SHK = []
-rho_dcdm_SHK = []
-rho_dr_SHK = []
-
-while True:
-    l = data.readline()
-    if not l:
-        break
-    tmp1, tmp2, tmp3 = map(float, l.strip().split(','))
-    a_SHK.append(np.exp(tmp1))
-    rho_dcdm_SHK.append(np.exp(tmp2))
-    rho_dr_SHK.append(np.exp(tmp3))
-    
-rho_dr_SHK = np.array(rho_dr_SHK)
-rho_dcdm_SHK = np.array(rho_dcdm_SHK)
-a_SHK = np.array(a_SHK)
-
-rho_g = 5.378150968509925e-05 * np.power(a_SHK, -4.)
-
-neff = (rho_dr_SHK) / ((7./8.) * (4./11)**(4./3.) * rho_g) + COFI.Neff()
-
-"""
-plt.plot(a, rho_dr, label='$\\rho_\mathrm{dr}^\mathrm{CLASS}$')
-plt.plot(a, rho_dcdm, label='$\\rho_\mathrm{dcdm}^\mathrm{CLASS}$')
-plt.plot(a_SHK, rho_dr_SHK, label='$\\rho_\mathrm{dr}^\mathrm{SHK}$')
-plt.plot(a_SHK, rho_dcdm_SHK, label='$\\rho_\mathrm{dcdm}^\mathrm{SHK}$')
-"""
-
-plt.plot(a_SHK, neff)
+plt.plot(a, rho_dr, label='$\\rho_\mathrm{dr}$')
+plt.plot(a, rho_dcdm, label='$\\rho_\mathrm{dcdm}$')
 
 plt.xscale('log')
-plt.yscale('linear')
+plt.yscale('log')
 plt.xlabel('a')
 plt.ylabel('$\\rho$')
-plt.ylim(2, 5)
 plt.legend()
 plt.title('Background energy density')
 #plt.gca().invert_xaxis()
