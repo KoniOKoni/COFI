@@ -48,6 +48,8 @@ log10z_tr = 4
 z_tr = 10**log10z_tr
 a_tr = 1 / (1 + z_tr)
 
+
+
 COFI = Class()
 COFI.set(common_settings)
 COFI.set({'omega_ini_dcdm':0.1301075, 'Gamma_dcdm': 1e-1, 'a_tr': a_tr})
